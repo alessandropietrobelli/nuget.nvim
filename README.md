@@ -2,14 +2,20 @@
 
 A NuGet package manager for Neovim: one floating window, four tabs, the whole solution at once.
 
+<!-- panvimdoc-ignore-start -->
+
 ![nuget.nvim on the jellyfin solution: the installed packages with their details, a filter,
 updating Polly in Directory.Packages.props, searching for Bogus and installing it in one project](assets/demo.gif)
 
 <sub>Recorded on a [jellyfin](https://github.com/jellyfin/jellyfin) checkout — 41 projects,
 central package management. The demo is a script: [`assets/demo.tape`](assets/demo.tape).</sub>
 
-jellyfin has nothing to flag. On a solution that does, the list says so — a vulnerable package,
-an outdated one at different versions across projects (`≠`), a deprecated one:
+jellyfin has nothing to flag.
+
+<!-- panvimdoc-ignore-end -->
+
+On a solution that does, the list says so — a vulnerable package, an outdated one at different
+versions across projects (`≠`), a deprecated one:
 
 ```
 Microsoft.Azure.Storage.Blob 11.2.3  deprecated

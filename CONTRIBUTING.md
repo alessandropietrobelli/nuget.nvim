@@ -69,6 +69,19 @@ stable and nightly.
 Keep `README.md` in sync when you change behaviour, keys or configuration defaults — its `setup()`
 block mirrors `default_config` in `lua/nuget/init.lua`.
 
+`doc/nuget.txt`, the `:help` file, is generated from `README.md` with
+[panvimdoc](https://github.com/kdheepak/panvimdoc): when you change the README, regenerate it and
+commit both together. With [pandoc](https://pandoc.org) installed, from a panvimdoc checkout:
+
+```sh
+./panvimdoc.sh --project-name nuget --input-file /path/to/README.md \
+  --vim-version "Neovim >= 0.10" --description "NuGet package manager: browse, update, consolidate and audit a .NET solution" \
+  --toc true --treesitter true --ignore-rawblocks true --shift-heading-level-by -1
+```
+
+Parts of the README that make no sense in `:help` (the demo) sit between
+`<!-- panvimdoc-ignore-start -->` and `<!-- panvimdoc-ignore-end -->`.
+
 ## Code layout
 
 | Path | Responsibility |
