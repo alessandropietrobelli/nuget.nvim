@@ -14,8 +14,8 @@ jellyfin has nothing to flag.
 
 <!-- panvimdoc-ignore-end -->
 
-On a solution that does, the list says so — a vulnerable package, an outdated one at different
-versions across projects (`≠`), a deprecated one:
+On a solution that does, the list says so — a vulnerable package, an outdated one referenced at
+different versions across projects, a deprecated one:
 
 ```
 Microsoft.Azure.Storage.Blob 11.2.3  deprecated
@@ -245,6 +245,13 @@ nvim --headless -u tests/minimal_init.lua -c "PlenaryBustedDirectory tests/ {min
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## See also
+
+Two more plugins for .NET in Neovim, by the same author:
+
+- [dotnet-tree.nvim](https://github.com/alessandropietrobelli/dotnet-tree.nvim) — a .NET solution explorer, as a neo-tree source: solution folders, projects, references and packages the way the solution declares them
+- [dotnet-counters.nvim](https://github.com/alessandropietrobelli/dotnet-counters.nvim) — live .NET runtime metrics (CPU, memory, GC, exceptions, HTTP latency) in a side panel next to the debugger
 
 ## Trademarks
 

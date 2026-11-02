@@ -9,6 +9,17 @@ keys may land in a minor release; they will always be listed here.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-02
+
+No change to the plugin's code.
+
+### Added
+
+- `:help nuget`: the help file, generated from the README with panvimdoc, so the
+  documentation is there inside Neovim. Sections have short tags, such as
+  `nuget-usage` and `nuget-configuration`.
+- A "See also" section pointing to dotnet-tree.nvim and dotnet-counters.nvim.
+
 ## [0.1.0] - 2026-11-02
 
 First public release.
@@ -56,5 +67,6 @@ First public release.
   chain and `Directory.Build.targets` are followed.
 - `packages.config` projects are not supported.
 
-[Unreleased]: https://github.com/alessandropietrobelli/nuget.nvim/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/alessandropietrobelli/nuget.nvim/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/alessandropietrobelli/nuget.nvim/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/alessandropietrobelli/nuget.nvim/releases/tag/v0.1.0

@@ -14,13 +14,14 @@ Table of Contents                                    *nuget-table-of-contents*
   - Highlights                                |nuget-configuration-highlights|
 6. Limitations                                             |nuget-limitations|
 7. Development                                             |nuget-development|
-8. Trademarks                                               |nuget-trademarks|
-9. License                                                     |nuget-license|
+8. See also                                                   |nuget-see-also|
+9. Trademarks                                               |nuget-trademarks|
+10. License                                                    |nuget-license|
 A NuGet package manager for Neovim: one floating window, four tabs, the whole
 solution at once.
 
 On a solution that does, the list says so — a vulnerable package, an outdated
-one at different versions across projects (`≠`), a deprecated one:
+one referenced at different versions across projects, a deprecated one:
 
 >
     Microsoft.Azure.Storage.Blob 11.2.3  deprecated
@@ -330,7 +331,16 @@ See CONTRIBUTING.md <CONTRIBUTING.md>.
 
 
 ==============================================================================
-8. Trademarks                                               *nuget-trademarks*
+8. See also                                                   *nuget-see-also*
+
+Two more plugins for .NET in Neovim, by the same author:
+
+- dotnet-tree.nvim <https://github.com/alessandropietrobelli/dotnet-tree.nvim> — a .NET solution explorer, as a neo-tree source: solution folders, projects, references and packages the way the solution declares them
+- dotnet-counters.nvim <https://github.com/alessandropietrobelli/dotnet-counters.nvim> — live .NET runtime metrics (CPU, memory, GC, exceptions, HTTP latency) in a side panel next to the debugger
+
+
+==============================================================================
+9. Trademarks                                               *nuget-trademarks*
 
 nuget.nvim is an independent project. It is not affiliated with, endorsed or
 sponsored by Microsoft or the .NET Foundation, and it is not an official NuGet
@@ -340,7 +350,7 @@ configure and from nuget.org’s public APIs.
 
 
 ==============================================================================
-9. License                                                     *nuget-license*
+10. License                                                    *nuget-license*
 
 Apache 2.0 <LICENSE>
 
