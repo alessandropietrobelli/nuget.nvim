@@ -17,6 +17,14 @@ local TABS = { "browse", "installed", "updates", "consolidate" }
 local TAB_TITLES = { browse = "Browse", installed = "Installed", updates = "Updates", consolidate = "Consolidate" }
 local SPINNER = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
 
+---@class NugetSearchState
+---@field query string
+---@field results NugetSearchResult[]
+---@field loading boolean
+---@field more boolean
+---@field skip integer
+---@field job NugetJob?
+
 ---@class NugetUiState
 ---@field config table
 ---@field target NugetTarget
@@ -27,7 +35,7 @@ local SPINNER = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇",
 ---@field jobs NugetJob[]
 ---@field filters table<string, string>
 ---@field marks table<string, true>
----@field search {query: string, results: NugetSearchResult[], loading: boolean, more: boolean, skip: integer, job: NugetJob?}
+---@field search NugetSearchState
 ---@field prerelease boolean
 ---@field rows NugetLine[]
 ---@field meta NugetMetadata?
