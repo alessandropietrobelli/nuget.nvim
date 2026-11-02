@@ -550,6 +550,7 @@ local function run_ops(ops, summary)
     return
   end
   local failures = {}
+  local target = S.target.path
   local i = 0
   local function step()
     i = i + 1
@@ -559,6 +560,14 @@ local function run_ops(ops, summary)
       sync_timer()
       -- dotnet rewrote project and props files: buffers showing them should show the new text
       pcall(vim.cmd.checktime)
+      -- Tell whoever shows those files (a solution explorer, say) to read them again
+      if #failures < #ops then
+        pcall(vim.api.nvim_exec_autocmds, "User", {
+          pattern = "NugetPackagesChanged",
+          modeline = false,
+          data = { target = target },
+        })
+      end
       if #failures == 0 then
         notify(summary)
       else
@@ -1367,11 +1376,21 @@ end
 ---@param target NugetTarget
 ---@param opts {tab: string?, query: string?, project: string?}
 function M.open(config, target, opts)
+  local hint_project = opts.project and vim.fs.normalize(vim.fn.fnamemodify(opts.project, ":p")) or nil
   if is_open() then
     if S.target.path == target.path then
       vim.api.nvim_set_current_win(S.layout.list.win)
       if opts.tab then
         actions.switch(opts.tab)()
+      end
+      if hint_project then
+        S.hint_project = hint_project
+      end
+      if opts.package then
+        -- Picked up by the next render, which puts the cursor on it
+        S.restore_id = opts.package
+        render_list()
+        render_details()
       end
       if opts.query then
         M.set_query(opts.query)
@@ -1395,13 +1414,15 @@ function M.open(config, target, opts)
     search = { query = "", results = {}, loading = false, more = false, skip = 0 },
     prerelease = config.prerelease,
     rows = {},
-    hint_project = opts.project and vim.fs.normalize(vim.fn.fnamemodify(opts.project, ":p")) or nil,
+    hint_project = hint_project,
     augroup = vim.api.nvim_create_augroup("nuget_ui", { clear = true }),
     problems_seen = {},
   }
   set_keymaps()
   set_autocmds()
   actions.switch(S.tab)()
+  -- Once the package list is in, the cursor lands on this package
+  S.restore_id = opts.package
   load()
   if opts.query and opts.query ~= "" then
     M.set_query(opts.query)

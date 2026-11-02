@@ -9,6 +9,24 @@ keys may land in a minor release; they will always be listed here.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-02
+
+### Added
+
+- `open({ package = "Id" })` opens the window on that package, in the
+  Installed tab; with the window already open, it moves the cursor there.
+- `open({ project = ... })` also updates the project picked for installs when
+  the window is already open.
+- A `User NugetPackagesChanged` event after every change, with the solution
+  in `data.target`, so other plugins can reload the files `dotnet` rewrote.
+  dotnet-tree.nvim uses both: its `a` key opens this window.
+
+### Fixed
+
+- A `dotnet` command whose working folder no longer exists (a project moved
+  while the window was open) runs from the current directory instead of
+  failing before it starts.
+
 ## [0.1.1] - 2026-11-02
 
 No change to the plugin's code.
@@ -67,6 +85,7 @@ First public release.
   chain and `Directory.Build.targets` are followed.
 - `packages.config` projects are not supported.
 
-[Unreleased]: https://github.com/alessandropietrobelli/nuget.nvim/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/alessandropietrobelli/nuget.nvim/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/alessandropietrobelli/nuget.nvim/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/alessandropietrobelli/nuget.nvim/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/alessandropietrobelli/nuget.nvim/releases/tag/v0.1.0

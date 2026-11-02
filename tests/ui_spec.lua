@@ -12,6 +12,7 @@ local function fake_dotnet(dir)
     '  *--deprecated*) cat "' .. fixtures .. '/list_deprecated.json" ;;',
     '  "list "*) cat "' .. fixtures .. '/list_plain.json" ;;',
     '  "package search"*) cat "' .. fixtures .. '/search.json" ;;',
+    '  "add "*) echo "$*" >> "' .. dir .. '/calls.log" ;;',
     "  *) exit 1 ;;",
     "esac",
   }, script)
@@ -125,6 +126,49 @@ describe("window", function()
     assert.same(before, vim.api.nvim_buf_get_lines(s.layout.list.buf, 0, -1, false))
     wait_loaded()
     assert.same(before, vim.api.nvim_buf_get_lines(s.layout.list.buf, 0, -1, false))
+  end)
+
+  local function current_id(s)
+    local row = vim.api.nvim_win_get_cursor(s.layout.list.win)[1]
+    local item = s.rows[row] and s.rows[row].item
+    return item and item.package and item.package.id
+  end
+
+  it("opens on a package", function()
+    require("nuget").open({ package = "Serilog" })
+    local s = wait_loaded()
+    assert.equals("installed", s.tab)
+    assert.equals("Serilog", current_id(s))
+  end)
+
+  it("moves to a package and takes the project hint when it is already open", function()
+    require("nuget").open()
+    local s = wait_loaded()
+    require("nuget").open({ package = "Microsoft.Azure.Storage.Blob", project = dir .. "/Api/Api.csproj" })
+    assert.equals("Microsoft.Azure.Storage.Blob", current_id(s))
+    assert.equals(vim.fs.normalize(dir .. "/Api/Api.csproj"), s.hint_project)
+  end)
+
+  it("tells other plugins when packages changed", function()
+    local events = {}
+    local au = vim.api.nvim_create_autocmd("User", {
+      pattern = "NugetPackagesChanged",
+      callback = function(ev)
+        table.insert(events, ev.data)
+      end,
+    })
+    require("nuget").open({ package = "Serilog" })
+    local s = wait_loaded()
+    ui.actions.update()
+    assert.is_true(vim.wait(5000, function()
+      return #events > 0
+    end, 20))
+    vim.api.nvim_del_autocmd(au)
+    assert.equals(s.target.path, events[1].target)
+    -- Serilog is at 2.10.0 in Api and 3.0.0 in Lib: both are updated to the latest
+    local calls = vim.fn.readfile(dir .. "/calls.log")
+    assert.equals(2, #calls)
+    assert.matches("package Serilog %-%-version 4%.4%.0", calls[1])
   end)
 
   it("searches from the Browse tab", function()

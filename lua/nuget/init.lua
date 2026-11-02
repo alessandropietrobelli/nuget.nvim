@@ -66,8 +66,9 @@ function M.setup(opts)
 end
 
 --- Open the package manager.
----@param opts {tab: string?, query: string?, project: string?, solution: string?}?
+---@param opts {tab: string?, query: string?, package: string?, project: string?, solution: string?}?
 ---   tab: tab to show; query: start a search (implies the Browse tab);
+---   package: put the cursor on this package id (implies the Installed tab);
 ---   project: preselect this project when installing; solution: manage this solution or project
 function M.open(opts)
   opts = opts or {}
@@ -77,6 +78,8 @@ function M.open(opts)
   end
   if opts.query and not opts.tab then
     opts.tab = "browse"
+  elseif opts.package and not opts.tab then
+    opts.tab = "installed"
   end
   local explicit = opts.solution or M.config.solution
   if type(explicit) == "function" then

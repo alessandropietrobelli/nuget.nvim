@@ -187,6 +187,21 @@ LUA API                                                  *nuget-usage-lua-api*
     require("nuget").open({ query = "Serilog" })               -- search
     require("nuget").open({ project = "src/Api/Api.csproj" })  -- preselect it when installing
     require("nuget").open({ solution = "path/to/Other.sln" })
+    require("nuget").open({ package = "Serilog" })             -- on that package, in Installed
+<
+
+After every change it makes (install, update, remove), nuget.nvim fires `User
+NugetPackagesChanged`, with the solution or folder it manages in `data.target`.
+A plugin that shows project files can listen for it and read them again — the
+changes are made by `dotnet`, outside any buffer:
+
+>lua
+    vim.api.nvim_create_autocmd("User", {
+      pattern = "NugetPackagesChanged",
+      callback = function(ev)
+        print("packages changed in " .. ev.data.target)
+      end,
+    })
 <
 
 
@@ -335,7 +350,7 @@ See CONTRIBUTING.md <CONTRIBUTING.md>.
 
 Two more plugins for .NET in Neovim, by the same author:
 
-- dotnet-tree.nvim <https://github.com/alessandropietrobelli/dotnet-tree.nvim> — a .NET solution explorer, as a neo-tree source: solution folders, projects, references and packages the way the solution declares them
+- dotnet-tree.nvim <https://github.com/alessandropietrobelli/dotnet-tree.nvim> — a .NET solution explorer, as a neo-tree source: solution folders, projects, references and packages the way the solution declares them. Its `a` key opens this window, on the project or package under the cursor
 - dotnet-counters.nvim <https://github.com/alessandropietrobelli/dotnet-counters.nvim> — live .NET runtime metrics (CPU, memory, GC, exceptions, HTTP latency) in a side panel next to the debugger
 
 

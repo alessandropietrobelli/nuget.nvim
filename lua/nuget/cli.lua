@@ -15,9 +15,12 @@ M.cmd = "dotnet"
 function M.run(args, opts, cb)
   opts = opts or {}
   local cancelled = false
+  -- A folder that is gone (a project moved meanwhile) would fail the spawn itself; every path
+  -- in the arguments is absolute, so running from the current directory is just as good
+  local cwd = opts.cwd and vim.fn.isdirectory(opts.cwd) == 1 and opts.cwd or nil
   local ok_spawn, proc = pcall(vim.system, vim.list_extend({ M.cmd }, args), {
     text = true,
-    cwd = opts.cwd,
+    cwd = cwd,
     env = { DOTNET_CLI_UI_LANGUAGE = "en", DOTNET_NOLOGO = "1" },
   }, function(result)
     vim.schedule(function()
