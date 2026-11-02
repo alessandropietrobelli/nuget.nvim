@@ -105,6 +105,28 @@ describe("window", function()
     end
   end)
 
+  it("starts a tab at its top, not on the package the previous tab was on", function()
+    require("nuget").open()
+    local s = wait_loaded()
+    -- Serilog is the last installed package and the second update
+    vim.api.nvim_win_set_cursor(s.layout.list.win, { 3, 0 })
+    ui.actions.switch("updates")()
+    assert.equals(1, vim.api.nvim_win_get_cursor(s.layout.list.win)[1])
+    assert.matches("Newtonsoft%.Json", vim.api.nvim_get_current_line())
+  end)
+
+  it("keeps showing the packages while it reloads", function()
+    require("nuget").open()
+    local s = wait_loaded()
+    local before = vim.api.nvim_buf_get_lines(s.layout.list.buf, 0, -1, false)
+    ui.actions.refresh()
+    -- The reload has started but its list is not in yet
+    assert.is_true(s.loading.plain)
+    assert.same(before, vim.api.nvim_buf_get_lines(s.layout.list.buf, 0, -1, false))
+    wait_loaded()
+    assert.same(before, vim.api.nvim_buf_get_lines(s.layout.list.buf, 0, -1, false))
+  end)
+
   it("searches from the Browse tab", function()
     require("nuget").open({ query = "Serilog" })
     local s = wait_loaded()

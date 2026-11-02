@@ -53,8 +53,17 @@ function M.from_catalog(entry)
     table.insert(deps, { framework = group.targetFramework or "any", packages = packages })
   end
   local license = entry.licenseExpression
-  if (not license or license == "") and entry.licenseUrl and entry.licenseUrl ~= "" then
-    license = entry.licenseUrl
+  if not license or license == "" then
+    -- Packages that ship their license as a file get this placeholder URL from nuget.org
+    if entry.licenseFile and entry.licenseFile ~= "" then
+      license = "file in the package (" .. entry.licenseFile .. ")"
+    elseif
+      entry.licenseUrl
+      and entry.licenseUrl ~= ""
+      and not entry.licenseUrl:find("aka.ms/deprecateLicenseUrl", 1, true)
+    then
+      license = entry.licenseUrl
+    end
   end
   return {
     id = entry.id,

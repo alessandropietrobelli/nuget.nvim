@@ -156,6 +156,21 @@ describe("each_limited", function()
 end)
 
 describe("catalog metadata", function()
+  it("says the license is a file instead of showing nuget.org's placeholder URL", function()
+    local registry = require("nuget.registry")
+    local meta = registry.from_catalog({
+      id = "Bogus",
+      version = "35.6.5",
+      licenseFile = "LICENSE",
+      licenseUrl = "https://aka.ms/deprecateLicenseUrl",
+    })
+    assert.equals("file in the package (LICENSE)", meta.license)
+    assert.is_nil(
+      registry.from_catalog({ id = "X", version = "1", licenseUrl = "https://aka.ms/deprecateLicenseUrl" }).license
+    )
+    assert.equals("MIT", registry.from_catalog({ id = "X", version = "1", licenseExpression = "MIT" }).license)
+  end)
+
   it("reads the deprecation and its alternative", function()
     local meta = require("nuget.registry").from_catalog({
       id = "Microsoft.Azure.Storage.Blob",

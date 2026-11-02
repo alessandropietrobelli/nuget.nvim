@@ -149,14 +149,24 @@ local function render_header()
       status = { spinner() .. " verifying versions with dotnet", "NugetMuted" }
     end
   end
-  local right = (status and (status[1] .. "  ") or "")
-    .. S.target.name
-    .. (S.prerelease and "  +prerelease" or "")
-    .. " "
   local used = 0
   for _, c in ipairs(chunks) do
     used = used + vim.fn.strdisplaywidth(c[1])
   end
+  -- The status gets what is left between the tabs and the solution name, cut to fit
+  local fixed = vim.fn.strdisplaywidth(S.target.name .. (S.prerelease and "  +prerelease" or "") .. " ")
+  if status then
+    local room = width - used - fixed - 3
+    if room < 8 then
+      status = nil
+    elseif vim.fn.strdisplaywidth(status[1]) > room then
+      status[1] = view.fit(status[1], room)
+    end
+  end
+  local right = (status and (status[1] .. "  ") or "")
+    .. S.target.name
+    .. (S.prerelease and "  +prerelease" or "")
+    .. " "
   table.insert(chunks, { string.rep(" ", math.max(width - used - vim.fn.strdisplaywidth(right), 1)) })
   if status then
     table.insert(chunks, { status[1] .. "  ", status[2] })
@@ -319,10 +329,18 @@ end
 --- nuget.org quick checks over the packages of the plain report: latest versions,
 --- vulnerabilities of every resolved version (direct and transitive), deprecations.
 ---@param generation integer
-local function quick_checks(generation)
-  local m = S.model
+---@param m NugetModel the model being filled
+---@param on_complete fun() once all three checks are in
+local function quick_checks(generation, m, on_complete)
   local function current()
     return is_open() and S.generation == generation
+  end
+  local pending = 3
+  local function finish_one()
+    pending = pending - 1
+    if pending == 0 then
+      on_complete()
+    end
   end
   local direct = model.installed(m)
   local ids = vim.tbl_map(function(pkg)
@@ -342,6 +360,7 @@ local function quick_checks(generation)
       if current() then
         m.loaded.fast_latest = true
         S.loading.fast_latest = nil
+        finish_one()
         sync_timer()
         render()
       end
@@ -364,6 +383,7 @@ local function quick_checks(generation)
       report_problems({ "Could not download the nuget.org vulnerability database" })
     end
     S.loading.fast_vulnerable = nil
+    finish_one()
     sync_timer()
     render()
   end)
@@ -390,6 +410,7 @@ local function quick_checks(generation)
       if current() then
         m.loaded.deprecated = true
         S.loading.fast_deprecated = nil
+        finish_one()
         sync_timer()
         render()
       end
@@ -405,7 +426,10 @@ local function load()
   solution.clear_cache()
   S.generation = (S.generation or 0) + 1
   local generation = S.generation
-  S.model = model.new()
+  -- The new model is filled on the side: until its package list is in, the window keeps
+  -- showing the previous one instead of going blank for the seconds a reload takes
+  local fresh = model.new()
+  S.stale = true
   local fast_ok = fast_enabled()
   -- Without the quick checks, the dotnet reports are the only source
   local verify = vim.tbl_extend("force", {}, S.config.verify)
@@ -426,9 +450,9 @@ local function load()
       if not is_open() or S.generation ~= generation then
         return
       end
-      model.apply(S.model, kind == "plain" and "transitive" or kind, report)
+      model.apply(fresh, kind == "plain" and "transitive" or kind, report)
       if kind == "plain" then
-        S.model.loaded.plain = true
+        fresh.loaded.plain = true
       end
       S.loading[kind] = nil
       report_problems(report.problems)
@@ -448,8 +472,15 @@ local function load()
       "transitive",
       opts,
       done("plain", function()
+        -- Show the new model once it knows as much as the one on screen: with the quick checks,
+        -- after them, or the Updates tab would empty for a moment and lose the cursor
         if fast_ok then
-          quick_checks(generation)
+          quick_checks(generation, fresh, function()
+            S.model, S.stale = fresh, false
+            render()
+          end)
+        else
+          S.model, S.stale = fresh, false
         end
         for _, kind in ipairs({ "outdated", "vulnerable", "deprecated" }) do
           if verify[kind] then
@@ -526,6 +557,8 @@ local function run_ops(ops, summary)
     if not op then
       S.busy = nil
       sync_timer()
+      -- dotnet rewrote project and props files: buffers showing them should show the new text
+      pcall(vim.cmd.checktime)
       if #failures == 0 then
         notify(summary)
       else
@@ -556,6 +589,11 @@ local function busy_guard()
     notify("Wait for the current operation to finish", vim.log.levels.WARN)
     return true
   end
+  -- During a reload the list still shows the previous state; acting on it could use stale versions
+  if S.stale and S.model.loaded.plain then
+    notify("Wait for the package list to reload", vim.log.levels.WARN)
+    return true
+  end
   return false
 end
 
@@ -577,8 +615,6 @@ local function edit_file(step, cb)
     return cb(false, err)
   end
   local ok, werr = xml.write(step.file, new)
-  -- Buffers showing the file would otherwise hold the old text
-  vim.cmd("checktime")
   cb(ok, ok and "" or tostring(werr))
 end
 
@@ -859,6 +895,10 @@ function actions.switch(tab)
     vim.bo[S.layout.input.buf].modifiable = true
     local text = tab == "browse" and S.search.query or (S.filters[tab] or "")
     vim.api.nvim_buf_set_lines(S.layout.input.buf, 0, -1, false, { text })
+    -- A new tab starts at its top. Without forgetting the old rows, the render would keep the
+    -- cursor on the package it was on in the previous tab, and the next key would act there.
+    S.rows = {}
+    S.restore_id = nil
     vim.api.nvim_win_set_cursor(S.layout.list.win, { 1, 0 })
     render()
   end

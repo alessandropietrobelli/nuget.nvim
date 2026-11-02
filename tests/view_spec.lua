@@ -102,6 +102,35 @@ describe("list view", function()
     assert.matches("press %]", t[#t])
   end)
 
+  it("names the feed only when results come from more than one", function()
+    local function first_line(results)
+      local s = state("browse", { search = { query = "x", results = results, loading = false, more = false } })
+      return view.list(s, 100)[1].text
+    end
+    local one = { { id = "Bogus", version = "35.6.5", source = "nuget" } }
+    assert.is_nil(first_line(one):find("[nuget]", 1, true))
+    local two = { one[1], { id = "Bogus.Internal", version = "1.0.0", source = "private-feed" } }
+    assert.is_not_nil(first_line(two):find("[nuget]", 1, true))
+  end)
+
+  it("marks shared versions only when the solution also has project versions", function()
+    local s = state("installed")
+    local function has_mark()
+      return vim.iter(view.list(s, 100)):any(function(l)
+        return l.text:find(icons.central, 1, true) ~= nil
+      end)
+    end
+    assert.is_false(has_mark())
+    -- One package central, the others in their projects: the mark tells them apart
+    s.model.packages.serilog.central = "/repo/Directory.Packages.props"
+    assert.is_true(has_mark())
+    -- All of them central: the mark would be on every row
+    for _, pkg in pairs(s.model.packages) do
+      pkg.central = "/repo/Directory.Packages.props"
+    end
+    assert.is_false(has_mark())
+  end)
+
   it("never makes a line wider than the pane", function()
     for _, tab in ipairs({ "installed", "updates", "consolidate" }) do
       for _, line in ipairs(view.list(state(tab), 60)) do
@@ -141,6 +170,24 @@ describe("details view", function()
     assert.matches("High%s+https://github%.com/advisories/GHSA%-5crp%-9r3c%-p9vr", text)
     assert.matches("License MIT", text)
     assert.matches("Version 13%.0%.4  2025%-09%-16", text)
+  end)
+
+  it("drops the frameworks rather than wrap a project row", function()
+    local s = state("installed")
+    local pkg = s.model.packages["newtonsoft.json"]
+    local function api_row(width)
+      for _, line in
+        ipairs(view.details({ kind = "package", package = pkg }, { model = s.model, icons = icons }, width))
+      do
+        if line.text:match("^  Api ") then
+          return line.text
+        end
+      end
+    end
+    assert.matches("net8%.0", api_row(50))
+    local narrow = api_row(16)
+    assert.is_nil(narrow:find("net8.0", 1, true))
+    assert.matches("12%.0%.1", narrow)
   end)
 
   it("lists the dependencies of the frameworks in use first", function()

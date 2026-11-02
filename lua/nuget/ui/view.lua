@@ -105,8 +105,9 @@ end
 --- Badge chunks for a package: vulnerable, deprecated, inconsistent, central.
 ---@param pkg NugetPackage
 ---@param icons table
+---@param show_central boolean
 ---@return {[1]: string, [2]: string?}[]
-local function badges(pkg, icons)
+local function badges(pkg, icons, show_central)
   local out = {}
   local rank, severity = model.severity(pkg)
   if rank > 0 then
@@ -118,10 +119,31 @@ local function badges(pkg, icons)
   if model.is_direct(pkg) and model.is_inconsistent(pkg) then
     table.insert(out, { " " .. icons.inconsistent, "NugetInconsistent" })
   end
-  if pkg.central then
+  if show_central and pkg.central then
     table.insert(out, { " " .. icons.central, "NugetMuted" })
   end
   return out
+end
+
+--- Whether the shared-version mark tells anything: only when some packages have their version
+--- in a shared file and others in the projects. When all of them do, it is on every row.
+---@param m NugetModel
+---@return boolean
+local function mixed_origins(m)
+  local shared, local_ = false, false
+  for _, pkg in pairs(m.packages) do
+    if model.is_direct(pkg) then
+      if pkg.central then
+        shared = true
+      else
+        local_ = true
+      end
+      if shared and local_ then
+        return true
+      end
+    end
+  end
+  return false
 end
 
 ---@param ids string[]
@@ -175,6 +197,9 @@ function M.list(s, width)
       end, results),
       width
     )
+    local several_sources = vim.iter(results):any(function(r)
+      return r.source ~= results[1].source
+    end)
     for _, r in ipairs(results) do
       local pkg = s.model.packages[r.id:lower()]
       local installed = pkg and model.is_direct(pkg) and model.versions(pkg)
@@ -187,7 +212,9 @@ function M.list(s, width)
       if installed then
         table.insert(chunks, { " " .. icons.installed .. " " .. table.concat(installed, ", "), "NugetInstalled" })
       end
-      if r.source ~= "nuget.org" then
+      -- Feed names are whatever nuget.config calls them ("nuget", "nuget.org"…): only worth
+      -- showing when the results come from more than one
+      if several_sources then
         table.insert(chunks, { " [" .. r.source .. "]", "NugetSource" })
       end
       b:add(chunks, { kind = "search", result = r })
@@ -198,6 +225,7 @@ function M.list(s, width)
     return b.lines
   end
 
+  local show_central = mixed_origins(s.model)
   local list
   if s.tab == "installed" then
     list = model.installed(s.model)
@@ -270,7 +298,7 @@ function M.list(s, width)
         table.insert(chunks, { ("  %d project%s"):format(n, n == 1 and "" or "s"), "NugetMuted" })
       end
     end
-    vim.list_extend(chunks, badges(pkg, icons))
+    vim.list_extend(chunks, badges(pkg, icons, show_central))
     b:add(chunks, { kind = "package", package = pkg })
   end
 
@@ -293,7 +321,7 @@ function M.list(s, width)
           { " " },
           { table.concat(semver.sort_desc(versions), ", "), "NugetVersion" },
         }
-        vim.list_extend(chunks, badges(pkg, icons))
+        vim.list_extend(chunks, badges(pkg, icons, show_central))
         b:add(chunks, { kind = "package", package = pkg })
       end
     end
@@ -327,7 +355,7 @@ function M.details(item, s, width)
   if latest then
     b:add({ { "Latest ", "NugetLabel" }, { latest, "NugetLatest" } })
   end
-  if result and result.source and result.source ~= "nuget.org" then
+  if result and result.source then
     b:add({ { "Source ", "NugetLabel" }, { result.source, "NugetSource" } })
   end
 
@@ -344,7 +372,6 @@ function M.details(item, s, width)
       local chunks = {
         { "  " .. fit(solution.project_name(path), namew) .. "  ", "NugetLabel" },
         { version, "NugetVersion" },
-        { "  " .. table.concat(ref.frameworks, ", "), "NugetMuted" },
       }
       if ref.requested and ref.requested ~= version then
         table.insert(chunks, { "  (" .. ref.requested .. ")", "NugetMuted" })
@@ -355,6 +382,15 @@ function M.details(item, s, width)
       local origin = ref.origin
       if origin and origin.kind == "override" then
         table.insert(chunks, { "  VersionOverride", "NugetInconsistent" })
+      end
+      -- The frameworks are the least important part: only when the row stays on one line
+      local used = 0
+      for _, c in ipairs(chunks) do
+        used = used + vim.fn.strdisplaywidth(c[1])
+      end
+      local frameworks = "  " .. table.concat(ref.frameworks, ", ")
+      if used + vim.fn.strdisplaywidth(frameworks) <= width then
+        table.insert(chunks, 3, { frameworks, "NugetMuted" })
       end
       b:add(chunks)
     end
