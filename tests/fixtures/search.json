@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "problems": [],
+  "searchResult": [
+    {
+      "sourceName": "private-feed",
+      "problems": [
+        {
+          "text": "Failed to retrieve metadata from source 'https://nuget.example.com/private/query?q=Serilog&skip=0&take=3&prerelease=false&semVerLevel=2.0.0'.",
+          "problemType": "Error"
+        }
+      ],
+      "packages": []
+    },
+    {
+      "sourceName": "nuget.org",
+      "packages": [
+        {
+          "id": "Serilog",
+          "latestVersion": "4.4.0",
+          "totalDownloads": 3522287330,
+          "owners": "serilog"
+        },
+        {
+          "id": "Serilog.Sinks.File",
+          "latestVersion": "7.0.0",
+          "totalDownloads": 1297007089,
+          "owners": "serilog"
+        },
+        {
+          "id": "Serilog.Sinks.Console",
+          "latestVersion": "6.1.1",
+          "totalDownloads": 1281706580,
+          "owners": "serilog"
+        }
+      ]
+    }
+  ]
+}

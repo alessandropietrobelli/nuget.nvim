@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "parameters": "--include-transitive",
+  "projects": [
+    {
+      "path": "/repo/A/Api/Api.csproj",
+      "frameworks": [
+        {
+          "framework": "net8.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.Azure.Storage.Blob",
+              "requestedVersion": "11.2.3",
+              "resolvedVersion": "11.2.3"
+            },
+            {
+              "id": "Newtonsoft.Json",
+              "requestedVersion": "12.0.1",
+              "resolvedVersion": "12.0.1"
+            },
+            {
+              "id": "Serilog",
+              "requestedVersion": "2.10.0",
+              "resolvedVersion": "2.10.0"
+            }
+          ],
+          "transitivePackages": [
+            {
+              "id": "Microsoft.Azure.KeyVault.Core",
+              "resolvedVersion": "2.0.4"
+            },
+            {
+              "id": "Microsoft.Azure.Storage.Common",
+              "resolvedVersion": "11.2.3"
+            },
+            {
+              "id": "Microsoft.NETCore.Platforms",
+              "resolvedVersion": "1.1.0"
+            },
+            {
+              "id": "Microsoft.NETCore.Targets",
+              "resolvedVersion": "1.0.1"
+            },
+            {
+              "id": "NETStandard.Library",
+              "resolvedVersion": "2.0.1"
+            },
+            {
+              "id": "System.Runtime",
+              "resolvedVersion": "4.1.0"
+            },
+            {
+              "id": "System.Threading.Tasks",
+              "resolvedVersion": "4.0.11"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "/repo/A/Lib/Lib.csproj",
+      "frameworks": [
+        {
+          "framework": "net8.0",
+          "topLevelPackages": [
+            {
+              "id": "Newtonsoft.Json",
+              "requestedVersion": "13.0.1",
+              "resolvedVersion": "13.0.1"
+            },
+            {
+              "id": "Serilog",
+              "requestedVersion": "3.0.0",
+              "resolvedVersion": "3.0.0"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

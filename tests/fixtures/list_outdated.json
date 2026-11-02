@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "parameters": "--outdated",
+  "sources": [
+    "https://api.nuget.org/v3/index.json",
+    "https://nuget.example.com/private/index.json"
+  ],
+  "projects": [
+    {
+      "path": "/repo/A/Api/Api.csproj",
+      "frameworks": [
+        {
+          "framework": "net8.0",
+          "topLevelPackages": [
+            {
+              "id": "Newtonsoft.Json",
+              "requestedVersion": "12.0.1",
+              "resolvedVersion": "12.0.1",
+              "latestVersion": "13.0.4"
+            },
+            {
+              "id": "Serilog",
+              "requestedVersion": "2.10.0",
+              "resolvedVersion": "2.10.0",
+              "latestVersion": "4.4.0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "/repo/A/Lib/Lib.csproj",
+      "frameworks": [
+        {
+          "framework": "net8.0",
+          "topLevelPackages": [
+            {
+              "id": "Newtonsoft.Json",
+              "requestedVersion": "13.0.1",
+              "resolvedVersion": "13.0.1",
+              "latestVersion": "13.0.4"
+            },
+            {
+              "id": "Serilog",
+              "requestedVersion": "3.0.0",
+              "resolvedVersion": "3.0.0",
+              "latestVersion": "4.4.0"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

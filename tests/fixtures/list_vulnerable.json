@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "parameters": "--vulnerable",
+  "sources": [
+    "https://api.nuget.org/v3/index.json",
+    "https://nuget.example.com/private/index.json"
+  ],
+  "projects": [
+    {
+      "path": "/repo/A/Api/Api.csproj",
+      "frameworks": [
+        {
+          "framework": "net8.0",
+          "topLevelPackages": [
+            {
+              "id": "Newtonsoft.Json",
+              "requestedVersion": "12.0.1",
+              "resolvedVersion": "12.0.1",
+              "vulnerabilities": [
+                {
+                  "severity": "High",
+                  "advisoryurl": "https://github.com/advisories/GHSA-5crp-9r3c-p9vr"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "/repo/A/Lib/Lib.csproj"
+    }
+  ]
+}

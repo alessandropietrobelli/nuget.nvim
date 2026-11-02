@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "parameters": "",
+  "projects": [
+    {
+      "path": "/repo/A/Api/Api.csproj",
+      "frameworks": [
+        {
+          "framework": "net8.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.Azure.Storage.Blob",
+              "requestedVersion": "11.2.3",
+              "resolvedVersion": "11.2.3"
+            },
+            {
+              "id": "Newtonsoft.Json",
+              "requestedVersion": "12.0.1",
+              "resolvedVersion": "12.0.1"
+            },
+            {
+              "id": "Serilog",
+              "requestedVersion": "2.10.0",
+              "resolvedVersion": "2.10.0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "/repo/A/Lib/Lib.csproj",
+      "frameworks": [
+        {
+          "framework": "net8.0",
+          "topLevelPackages": [
+            {
+              "id": "Newtonsoft.Json",
+              "requestedVersion": "13.0.1",
+              "resolvedVersion": "13.0.1"
+            },
+            {
+              "id": "Serilog",
+              "requestedVersion": "3.0.0",
+              "resolvedVersion": "3.0.0"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

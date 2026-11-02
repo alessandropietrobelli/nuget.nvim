@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "parameters": "--deprecated",
+  "sources": [
+    "https://api.nuget.org/v3/index.json",
+    "https://nuget.example.com/private/index.json"
+  ],
+  "projects": [
+    {
+      "path": "/repo/A/Api/Api.csproj",
+      "frameworks": [
+        {
+          "framework": "net8.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.Azure.Storage.Blob",
+              "requestedVersion": "11.2.3",
+              "resolvedVersion": "11.2.3",
+              "deprecationReasons": [
+                "Legacy"
+              ],
+              "alternativePackage": {
+                "id": "Azure.Storage.Blobs",
+                "versionRange": ">= 0.0.0"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "/repo/A/Lib/Lib.csproj"
+    }
+  ]
+}

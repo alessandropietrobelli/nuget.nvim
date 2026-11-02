@@ -1,0 +1,63 @@
+{
+  "version": 2,
+  "problems": [],
+  "searchResult": [
+    {
+      "sourceName": "nuget.org",
+      "packages": [
+        {
+          "id": "Serilog",
+          "version": "3.0.0"
+        },
+        {
+          "id": "Serilog",
+          "version": "3.0.1"
+        },
+        {
+          "id": "Serilog",
+          "version": "3.1.0"
+        },
+        {
+          "id": "Serilog",
+          "version": "3.1.1"
+        },
+        {
+          "id": "Serilog",
+          "version": "4.0.0"
+        },
+        {
+          "id": "Serilog",
+          "version": "4.0.1"
+        },
+        {
+          "id": "Serilog",
+          "version": "4.0.2"
+        },
+        {
+          "id": "Serilog",
+          "version": "4.1.0"
+        },
+        {
+          "id": "Serilog",
+          "version": "4.2.0"
+        },
+        {
+          "id": "Serilog",
+          "version": "4.3.0"
+        },
+        {
+          "id": "Serilog",
+          "version": "4.3.1"
+        },
+        {
+          "id": "Serilog",
+          "version": "4.4.0"
+        }
+      ]
+    },
+    {
+      "sourceName": "private-feed",
+      "packages": []
+    }
+  ]
+}

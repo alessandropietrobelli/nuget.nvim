@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  stylua:
+    name: stylua
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: JohnnyMorganz/stylua-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: latest
+          args: --check lua/ plugin/ tests/
+
+  luacheck:
+    name: luacheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install luacheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.1 luarocks
+          sudo luarocks install luacheck
+      - run: luacheck lua/ plugin/ tests/
+
+  tests:
+    name: tests (${{ matrix.neovim }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        neovim: [stable, nightly]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: ${{ matrix.neovim }}
+      - name: Fetch plenary
+        run: git clone --depth 1 https://github.com/nvim-lua/plenary.nvim deps/plenary.nvim
+      - name: Require every module
+        run: |
+          nvim --headless -u NONE --cmd "set runtimepath+=$GITHUB_WORKSPACE" \
+            -c "lua for _, m in ipairs({
+                  'nuget',
+                  'nuget.cli',
+                  'nuget.fast',
+                  'nuget.health',
+                  'nuget.model',
+                  'nuget.plan',
+                  'nuget.registry',
+                  'nuget.semver',
+                  'nuget.solution',
+                  'nuget.ui',
+                  'nuget.ui.checklist',
+                  'nuget.ui.layout',
+                  'nuget.ui.view',
+                  'nuget.xml',
+                }) do require(m) end print('all modules loaded')" \
+            -c "qa!"
+      - name: Run tests
+        run: |
+          nvim --headless -u tests/minimal_init.lua \
+            -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua'}"
