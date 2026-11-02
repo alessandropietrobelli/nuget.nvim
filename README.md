@@ -2,38 +2,19 @@
 
 A NuGet package manager for Neovim: one floating window, four tabs, the whole solution at once.
 
-The header, with the tabs and the keys of the current one:
+![nuget.nvim on the jellyfin solution: the installed packages with their details, a filter,
+updating Polly in Directory.Packages.props, searching for Bogus and installing it in one project](assets/demo.gif)
 
-```
- 󰏖 NuGet  1 Browse  [2 Installed 3]  3 Updates 2   4 Consolidate 2                  Lab.sln
- / filter · ⏎ actions · u update · v version · i add to projects · d remove · ? help · q close
-```
+<sub>Recorded on a [jellyfin](https://github.com/jellyfin/jellyfin) checkout — 41 projects,
+central package management. The demo is a script: [`assets/demo.tape`](assets/demo.tape).</sub>
 
-The list (Installed):
+jellyfin has nothing to flag. On a solution that does, the list says so — a vulnerable package,
+an outdated one at different versions across projects (`≠`), a deprecated one:
 
 ```
 Microsoft.Azure.Storage.Blob 11.2.3  deprecated
 Newtonsoft.Json              13.0.1, 12.0.1 ↑ 13.0.4  High ≠
 Serilog                      3.0.0, 2.10.0 ↑ 4.4.0 ≠
-```
-
-And the details of the package under the cursor:
-
-```
-Newtonsoft.Json
-Latest 13.0.4
-
-Installed
-  Api  12.0.1  net8.0 
-  Lib  13.0.1  net8.0
-
-Vulnerabilities
-   High     https://github.com/advisories/GHSA-5crp-9r3c-p9vr
-
-Version 13.0.4  2025-09-16
-Authors James Newton-King
-License MIT
-Project https://www.newtonsoft.com/json
 ```
 
 - **Browse** — search every configured feed as you type, see the details, install into the
@@ -256,6 +237,13 @@ nvim --headless -u tests/minimal_init.lua -c "PlenaryBustedDirectory tests/ {min
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Trademarks
+
+nuget.nvim is an independent project. It is not affiliated with, endorsed or sponsored by Microsoft
+or the .NET Foundation, and it is not an official NuGet client. NuGet and .NET are trademarks of
+their respective owners, used here only to say what the plugin works with. Package data comes from
+the feeds you configure and from nuget.org's public APIs.
 
 ## License
 
