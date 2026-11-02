@@ -76,7 +76,9 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```lua
 {
   "alessandropietrobelli/nuget.nvim",
-  cmd = "Nuget",
+  -- Startup only defines :Nuget; everything else loads when the window opens. Loading it
+  -- lazily would also hide :checkhealth nuget until the first :Nuget.
+  lazy = false,
   opts = {},
   keys = {
     { "<leader>cN", "<cmd>Nuget<cr>", desc = "NuGet packages" },
