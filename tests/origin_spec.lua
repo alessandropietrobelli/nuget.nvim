@@ -133,7 +133,8 @@ describe("version origin", function()
     )
     write("src/Directory.Build.props", {
       "<Project>",
-      "  <Import Project=\"$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))\" />",
+      '  <Import Project="$([MSBuild]::GetPathOfFileAbove('
+        .. "'Directory.Build.props', '$(MSBuildThisFileDirectory)../'))\" />",
       "</Project>",
     })
     write("src/Api/Api.csproj", { "<Project />" })
