@@ -82,6 +82,23 @@ commit both together. With [pandoc](https://pandoc.org) installed, from a panvim
 Parts of the README that make no sense in `:help` (the demo) sit between
 `<!-- panvimdoc-ignore-start -->` and `<!-- panvimdoc-ignore-end -->`.
 
+## Commit messages
+
+Pull requests are squash-merged, so the pull request title becomes the commit
+title on `main`. Write it the way the history already reads:
+
+- An imperative sentence, capitalised, with no trailing period:
+  *Add…*, *Fix…*, *Read…*, *Say…*.
+- Say what changes for someone using the plugin, not which file you touched:
+  *Open on a package, and tell other plugins when packages changed* rather
+  than *Update ui/init.lua*.
+- End with the issue it closes and then the pull request, in parentheses:
+  `(#41) (#42)`. A pull request with no issue gets just its own number.
+- A release is its own commit, titled `Release X.Y.Z` and nothing else.
+
+The body, when there is one, explains why the change is needed; what changed is
+in the diff. Close the issue in the last line, as `Closes #41`.
+
 ## Code layout
 
 | Path | Responsibility |
