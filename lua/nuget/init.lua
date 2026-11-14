@@ -32,6 +32,15 @@ M.default_config = {
     -- nothing within the limit is skipped. Change it for the session with `b` (Updates tab).
     max_bump = "major",
   },
+  inline = {
+    -- Show the latest version, vulnerabilities and deprecation at the end of each package line
+    -- in project files and Directory.*.props, from nuget.org (needs curl and `fast`). Toggle it
+    -- for the session with `:Nuget inline`.
+    enabled = false,
+    -- Keys, local to those buffers, for `:Nuget update` and `:Nuget version` on the package
+    -- under the cursor, e.g. "<leader>nu" and "<leader>nv"
+    keys = { update = nil, version = nil },
+  },
   search = {
     -- Results per page
     take = 30,
@@ -69,6 +78,12 @@ M.config = vim.deepcopy(M.default_config)
 ---@param opts NugetConfig?
 function M.setup(opts)
   M.config = vim.tbl_deep_extend("force", vim.deepcopy(M.default_config), opts or {})
+  local inline = require("nuget.inline")
+  if M.config.inline.enabled then
+    inline.enable()
+  elseif inline.is_enabled() then
+    inline.disable()
+  end
 end
 
 --- Open the package manager.

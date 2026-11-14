@@ -29,6 +29,22 @@ local function get_json(url, cb)
 end
 M.get_json = get_json
 
+--- Whether nuget.org can answer the quick checks: they are on, curl is there, and nuget.org is
+--- one of the sources.
+---@param config NugetConfig
+---@return boolean
+function M.enabled(config)
+  if not config.fast or vim.fn.executable("curl") ~= 1 then
+    return false
+  end
+  if not config.sources then
+    return true
+  end
+  return vim.iter(config.sources):any(function(s)
+    return s:lower():find("nuget.org", 1, true) ~= nil
+  end)
+end
+
 --- Run `fn(item, done)` over items with at most `limit` in flight; `on_done` after the last.
 ---@param items any[]
 ---@param limit integer

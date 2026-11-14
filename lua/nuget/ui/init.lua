@@ -329,20 +329,9 @@ local function kill_jobs()
   S.cancels = {}
 end
 
---- (Re)load everything: the plain list first (fast, fills the tabs), then the network
---- checks in parallel.
 --- Whether nuget.org can answer the quick checks: curl is there and nuget.org is a source.
 local function fast_enabled()
-  if not S.config.fast or vim.fn.executable("curl") ~= 1 then
-    return false
-  end
-  local sources = S.config.sources
-  if not sources then
-    return true
-  end
-  return vim.iter(sources):any(function(s)
-    return s:lower():find("nuget.org", 1, true) ~= nil
-  end)
+  return fast.enabled(S.config)
 end
 
 --- Throttled render, for the many small results of the quick checks.

@@ -107,7 +107,7 @@ end
 ---@param icons table
 ---@param show_central boolean
 ---@return {[1]: string, [2]: string?}[]
-local function badges(pkg, icons, show_central)
+function M.badges(pkg, icons, show_central)
   local out = {}
   local rank, severity = model.severity(pkg)
   if rank > 0 then
@@ -331,7 +331,7 @@ function M.list(s, width)
         end
       end
     end
-    vim.list_extend(chunks, badges(pkg, icons, show_central))
+    vim.list_extend(chunks, M.badges(pkg, icons, show_central))
     b:add(chunks, { kind = "package", package = pkg })
   end
 
@@ -354,7 +354,7 @@ function M.list(s, width)
           { " " },
           { table.concat(semver.sort_desc(versions), ", "), "NugetVersion" },
         }
-        vim.list_extend(chunks, badges(pkg, icons, show_central))
+        vim.list_extend(chunks, M.badges(pkg, icons, show_central))
         b:add(chunks, { kind = "package", package = pkg })
       end
     end
