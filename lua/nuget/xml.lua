@@ -2,7 +2,8 @@
 -- (formatting, comments, other items) stays exactly as it was.
 --
 -- Only what the SDK cannot edit goes through here: items in Directory.Build.props and
--- GlobalPackageReference (`dotnet add` refuses "items in imported files").
+-- GlobalPackageReference (`dotnet add` refuses "items in imported files"). The versions shown
+-- inside project files are read here too.
 local M = {}
 
 --- The text with comments blanked out (same length, so positions still match the original).
@@ -38,6 +39,7 @@ local function attributes(text, from, to)
 end
 
 ---@class NugetXmlItem
+---@field tag string as written in the file
 ---@field start integer first character of the element
 ---@field stop integer last character of the element
 ---@field attrs table<string, {value: string, start: integer, stop: integer}>
@@ -58,51 +60,65 @@ local function names(value, id)
   return false
 end
 
+--- Every `<tag …>` element of the text with one of `tags`, in the order they appear; those in
+--- comments are left out.
+---@param text string
+---@param tags string[] PackageReference | PackageVersion | GlobalPackageReference
+---@return NugetXmlItem[]
+function M.items(text, tags)
+  local clean = without_comments(text)
+  local items = {}
+  for _, tag in ipairs(tags) do
+    local pos = 1
+    while true do
+      local s, e = clean:find("<" .. tag .. "[%s/>]", pos)
+      if not s then
+        break
+      end
+      local gt = clean:find(">", e, true)
+      if not gt then
+        break
+      end
+      local self_closing = clean:sub(gt - 1, gt - 1) == "/"
+      local attrs = attributes(clean, s + #tag + 1, gt)
+      local stop, children = gt, {}
+      if not self_closing then
+        local close_s, close_e = clean:find("</" .. tag .. "%s*>", gt)
+        if not close_s then
+          break
+        end
+        stop = close_e
+        local body_from = gt + 1
+        for child, value_s, value, value_e in
+          clean:sub(body_from, close_s - 1):gmatch("<([%w]+)[^>]*>()([^<]*)()</%1%s*>")
+        do
+          children[child:lower()] = {
+            value = vim.trim(value),
+            start = body_from + value_s - 1,
+            stop = body_from + value_e - 2,
+          }
+        end
+      end
+      table.insert(items, { tag = tag, start = s, stop = stop, attrs = attrs, children = children })
+      pos = stop + 1
+    end
+  end
+  table.sort(items, function(a, b)
+    return a.start < b.start
+  end)
+  return items
+end
+
 --- Every `<tag Include="id" …>` (or Update="id") element in the text.
 ---@param text string
 ---@param tag string PackageReference | PackageVersion | GlobalPackageReference
 ---@param id string
 ---@return NugetXmlItem[]
 function M.find(text, tag, id)
-  local clean = without_comments(text)
-  local items = {}
-  local pos = 1
-  while true do
-    local s, e = clean:find("<" .. tag .. "[%s/>]", pos)
-    if not s then
-      break
-    end
-    local gt = clean:find(">", e, true)
-    if not gt then
-      break
-    end
-    local self_closing = clean:sub(gt - 1, gt - 1) == "/"
-    local attrs = attributes(clean, s + #tag + 1, gt)
-    local stop, children = gt, {}
-    if not self_closing then
-      local close_s, close_e = clean:find("</" .. tag .. "%s*>", gt)
-      if not close_s then
-        break
-      end
-      stop = close_e
-      local body_from = gt + 1
-      for child, value_s, value, value_e in
-        clean:sub(body_from, close_s - 1):gmatch("<([%w]+)[^>]*>()([^<]*)()</%1%s*>")
-      do
-        children[child:lower()] = {
-          value = vim.trim(value),
-          start = body_from + value_s - 1,
-          stop = body_from + value_e - 2,
-        }
-      end
-    end
-    local include = attrs.include or attrs.update
-    if include and names(include.value, id) then
-      table.insert(items, { start = s, stop = stop, attrs = attrs, children = children })
-    end
-    pos = stop + 1
-  end
-  return items
+  return vim.tbl_filter(function(item)
+    local include = item.attrs.include or item.attrs.update
+    return include ~= nil and names(include.value, id)
+  end, M.items(text, { tag }))
 end
 
 --- The version an item sets, and where: an attribute, or a child element of that name.

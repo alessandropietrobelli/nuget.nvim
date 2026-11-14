@@ -329,22 +329,6 @@ local function kill_jobs()
   S.cancels = {}
 end
 
---- (Re)load everything: the plain list first (fast, fills the tabs), then the network
---- checks in parallel.
---- Whether nuget.org can answer the quick checks: curl is there and nuget.org is a source.
-local function fast_enabled()
-  if not S.config.fast or vim.fn.executable("curl") ~= 1 then
-    return false
-  end
-  local sources = S.config.sources
-  if not sources then
-    return true
-  end
-  return vim.iter(sources):any(function(s)
-    return s:lower():find("nuget.org", 1, true) ~= nil
-  end)
-end
-
 --- Throttled render, for the many small results of the quick checks.
 local pending_render = false
 local function render_soon()
@@ -468,7 +452,7 @@ local function load()
   -- showing the previous one instead of going blank for the seconds a reload takes
   local fresh = model.new()
   S.stale = true
-  local fast_ok = fast_enabled()
+  local fast_ok = fast.enabled(S.config)
   -- Without the quick checks, the dotnet reports are the only source
   local verify = vim.tbl_extend("force", {}, S.config.verify)
   if not fast_ok then
@@ -1291,7 +1275,7 @@ function actions.update_all()
   end
   local function verify()
     -- Only nuget.org's flat container lists unlisted versions; `dotnet package search` does not
-    if S.max_bump == "major" or not fast_enabled() then
+    if S.max_bump == "major" or not fast.enabled(S.config) then
       return finish()
     end
     drop_unlisted(targets, {}, finish)
@@ -1423,6 +1407,12 @@ end
 
 function actions.refresh()
   registry.clear_cache()
+  -- The versions shown in project files are asked again too
+  local inline = require("nuget.inline")
+  if inline.is_enabled() then
+    inline.clear_cache()
+    inline.refresh_all()
+  end
   load()
 end
 

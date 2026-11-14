@@ -38,6 +38,19 @@ function M.check()
     health.warn("curl not found: the details pane will not show descriptions, licenses or dependencies")
   end
 
+  if not config.inline.enabled then
+    health.info("Versions in project files are off (inline.enabled = false)")
+  else
+    local why = require("nuget.fast").why_disabled(config)
+    if why then
+      health.warn("Versions in project files are on, but nuget.org cannot be asked: " .. why, {
+        "They need curl, `fast = true`, and nuget.org among the sources",
+      })
+    else
+      health.ok("Versions in project files are on, from nuget.org")
+    end
+  end
+
   local sln = require("nuget.solution")
   local solutions = sln.find_solutions(vim.fn.getcwd())
   if #solutions > 0 then

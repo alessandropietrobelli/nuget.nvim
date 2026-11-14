@@ -25,6 +25,14 @@ describe("xml", function()
     assert.equals(1, #xml.find(text, "PackageReference", "B"))
   end)
 
+  it("lists every item of the tags asked, in file order", function()
+    local items = xml.items('<PackageVersion Include="B" Version="2" /><PackageReference Include="A" />', {
+      "PackageReference",
+      "PackageVersion",
+    })
+    assert.same({ "PackageVersion", "PackageReference" }, { items[1].tag, items[2].tag })
+  end)
+
   it("reads versions from attributes and child elements", function()
     assert.equals("2.10.0", xml.version_of(xml.find(text, "PackageReference", "Serilog")[1], "version").value)
     assert.equals("12.0.1", xml.version_of(xml.find(text, "PackageReference", "Newtonsoft.Json")[1], "version").value)

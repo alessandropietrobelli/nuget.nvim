@@ -185,3 +185,141 @@ describe("catalog metadata", function()
     assert.equals("Azure.Storage.Blobs", meta.deprecation.alternative)
   end)
 end)
+
+describe("nuget.org requests", function()
+  local system, calls
+
+  --- Answer curl with `responses[url]`: {code = exit code, status = HTTP status, body = text}.
+  local function serve(responses)
+    calls = {}
+    ---@diagnostic disable-next-line: duplicate-set-field
+    vim.system = function(cmd, _, on_exit)
+      local url = cmd[#cmd]
+      table.insert(calls, url)
+      local r = responses[url] or { code = 6 }
+      vim.defer_fn(function()
+        on_exit({ code = r.code or 0, stdout = r.status and ((r.body or "") .. "\n" .. r.status) or "" })
+      end, 20)
+      return {}
+    end
+  end
+
+  before_each(function()
+    system = vim.system
+    fast.clear_cache()
+  end)
+
+  after_each(function()
+    vim.system = system
+    fast.clear_cache()
+  end)
+
+  local function get(url)
+    local out
+    fast.get_json(url, function(data, err)
+      out = { data = data, err = err }
+    end)
+    assert.is_true(vim.wait(1000, function()
+      return out ~= nil
+    end, 10))
+    return out
+  end
+
+  it("tells a package nuget.org does not have from a request that failed", function()
+    serve({
+      ok = { status = "200", body = '{"versions":["1.0.0"]}' },
+      missing = { status = "404", body = "<Error/>" },
+      busy = { status = "429", body = "slow down" },
+      broken = { status = "200", body = "<html>" },
+    })
+    assert.same({ "1.0.0" }, get("ok").data.versions)
+    assert.equals("missing", get("missing").err)
+    assert.equals("failed", get("busy").err)
+    assert.equals("failed", get("broken").err)
+    assert.equals("failed", get("offline").err, "curl could not connect")
+  end)
+
+  it("reports the packages it could not ask about apart from those nuget.org does not have", function()
+    local base = fast.flat_container
+    serve({
+      [base .. "serilog/index.json"] = { status = "200", body = '{"versions":["4.4.0"]}' },
+      [base .. "nope/index.json"] = { status = "404" },
+    })
+    local found, failed, done = {}, {}, false
+    fast.latest({ "Serilog", "Nope", "Timeout" }, {
+      prerelease = false,
+      concurrency = 2,
+      on_failed = function(id)
+        table.insert(failed, id)
+      end,
+    }, function(id)
+      table.insert(found, id)
+    end, function()
+      done = true
+    end)
+    assert.is_true(vim.wait(1000, function()
+      return done
+    end, 10))
+    assert.same({ "Serilog" }, found)
+    assert.same({ "Timeout" }, failed)
+  end)
+
+  it("downloads the vulnerability database once for callers asking together, and again after a failure", function()
+    local index = fast.vulnerability_index
+    serve({ [index] = { status = "503" } })
+    local answers = {}
+    for _ = 1, 3 do
+      fast.advisories(function(db)
+        table.insert(answers, db or false)
+      end)
+    end
+    assert.is_true(vim.wait(1000, function()
+      return #answers == 3
+    end, 10))
+    assert.same({ false, false, false }, answers)
+    assert.equals(1, #calls)
+    serve({
+      [index] = { status = "200", body = '[{"@id":"base"}]' },
+      base = { status = "200", body = '{"Newtonsoft.Json":[{"url":"u","severity":2,"versions":"(, 13.0.1)"}]}' },
+    })
+    local db
+    fast.advisories(function(d)
+      db = d
+    end)
+    assert.is_true(vim.wait(1000, function()
+      return db ~= nil
+    end, 10))
+    assert.equals("High", db["newtonsoft.json"][1].severity)
+  end)
+
+  it("asks again for metadata whose request failed, not for a version nuget.org does not have", function()
+    local registry = require("nuget.registry")
+    registry.clear_cache()
+    local leaf = registry.base .. "serilog/4.4.0.json"
+    local function fetch(id, version)
+      local out
+      registry.fetch(id, version, function(meta, failed)
+        out = { meta = meta, failed = failed }
+      end)
+      assert.is_true(vim.wait(1000, function()
+        return out ~= nil
+      end, 10))
+      return out
+    end
+    serve({ [registry.base .. "nope/1.0.0.json"] = { status = "404" } })
+    local r = fetch("Serilog", "4.4.0")
+    assert.is_true(r.failed)
+    assert.is_falsy(fetch("Nope", "1.0.0").failed)
+    serve({
+      [leaf] = {
+        status = "200",
+        body = '{"catalogEntry":{"id":"Serilog","version":"4.4.0","deprecation":{"reasons":["Legacy"]}}}',
+      },
+    })
+    assert.same({ "Legacy" }, fetch("Serilog", "4.4.0").meta.deprecation.reasons)
+    calls = {}
+    fetch("Nope", "1.0.0")
+    assert.same({}, calls, "the missing version is remembered")
+    registry.clear_cache()
+  end)
+end)

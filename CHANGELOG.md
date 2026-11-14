@@ -24,6 +24,23 @@ keys may land in a minor release; they will always be listed here.
   skipped, and the confirmation groups the updates as patch, minor and major,
   naming what it skips and the packages whose versions could not be fetched
   ([#1](https://github.com/alessandropietrobelli/nuget.nvim/issues/1)).
+- Versions inside project files, opt-in with `inline.enabled` or `:Nuget inline`:
+  `.csproj`, `.fsproj`, `.vbproj`, `Directory.Packages.props`,
+  `Directory.Build.props` and `Directory.Build.targets` show at the end of each
+  package line its latest version and kind, vulnerabilities and deprecation,
+  from nuget.org and never from `dotnet list package`.
+  `:Nuget update` and `:Nuget version` change the version of the package under
+  the cursor in the buffer itself, or go to its `PackageVersion` under central
+  package management; `inline.keys` maps them
+  ([#2](https://github.com/alessandropietrobelli/nuget.nvim/issues/2)).
+
+### Fixed
+
+- A request to nuget.org that fails (no network, a timeout) is no longer taken
+  for a package or version nuget.org does not have: details and deprecations
+  are asked again instead of staying empty for the session.
+- The nuget.org vulnerability database is downloaded once when it is asked for
+  from several places at the same time.
 
 ## [0.2.0] - 2026-11-02
 

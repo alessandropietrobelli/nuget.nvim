@@ -14,20 +14,60 @@ M.vulnerability_index = "https://api.nuget.org/v3/vulnerabilities/index.json"
 
 local SEVERITY = { [0] = "Low", [1] = "Moderate", [2] = "High", [3] = "Critical" }
 
+--- GET a JSON document. On failure `err` says why: "missing" when the server answered 404 (the
+--- package or version is not there), "failed" for anything else (no network, a timeout, a server
+--- error, a body that is not JSON), which is worth asking again later.
 ---@param url string
----@param cb fun(data: table?)
+---@param cb fun(data: table?, err: "missing"|"failed"|nil)
 local function get_json(url, cb)
-  vim.system({ "curl", "-sfL", "--compressed", "--max-time", "20", url }, { text = true }, function(result)
+  local cmd = { "curl", "-sL", "--compressed", "--max-time", "20", "-w", "\n%{http_code}", url }
+  vim.system(cmd, { text = true }, function(result)
     vim.schedule(function()
-      if result.code ~= 0 then
-        return cb(nil)
+      local body, status = (result.stdout or ""):match("^(.*)\n(%d%d%d)$")
+      if result.code ~= 0 or not status then
+        return cb(nil, "failed")
+      elseif status == "404" then
+        return cb(nil, "missing")
+      elseif not status:match("^2") then
+        return cb(nil, "failed")
       end
-      local ok, data = pcall(vim.json.decode, result.stdout or "", { luanil = { object = true, array = true } })
-      cb(ok and type(data) == "table" and data or nil)
+      local ok, data = pcall(vim.json.decode, body, { luanil = { object = true, array = true } })
+      if ok and type(data) == "table" then
+        cb(data)
+      else
+        cb(nil, "failed")
+      end
     end)
   end)
 end
 M.get_json = get_json
+
+--- Why nuget.org cannot answer the quick checks, or nil when it can: they must be on, curl must
+--- be there, and nuget.org must be one of the sources.
+---@param config NugetConfig
+---@return string?
+function M.why_disabled(config)
+  if not config.fast then
+    return "`fast` is off"
+  elseif vim.fn.executable("curl") ~= 1 then
+    return "curl is not installed"
+  elseif
+    config.sources
+    and not vim.iter(config.sources):any(function(s)
+      return s:lower():find("nuget.org", 1, true) ~= nil
+    end)
+  then
+    return "nuget.org is not among `sources`"
+  end
+  return nil
+end
+
+--- Whether nuget.org can answer the quick checks (see why_disabled).
+---@param config NugetConfig
+---@return boolean
+function M.enabled(config)
+  return M.why_disabled(config) == nil
+end
 
 --- Run `fn(item, done)` over items with at most `limit` in flight; `on_done` after the last.
 ---@param items any[]
@@ -68,19 +108,21 @@ function M.each_limited(items, limit, fn, on_done)
   }
 end
 
---- Latest version of each package on nuget.org, with every version it lists; packages it does
---- not know are skipped.
+--- Latest version of each package on nuget.org, with every version it lists. Packages it does
+--- not know are skipped; those it could not be asked about go to `opts.on_failed`.
 ---@param ids string[]
----@param opts {prerelease: boolean, concurrency: integer}
+---@param opts {prerelease: boolean, concurrency: integer, on_failed: fun(id: string)?}
 ---@param on_result fun(id: string, latest: string, versions: string[])
 ---@param on_done fun()
 ---@return {cancel: fun()}
 function M.latest(ids, opts, on_result, on_done)
   return M.each_limited(ids, opts.concurrency, function(id, done)
-    get_json(M.flat_container .. id:lower() .. "/index.json", function(data)
+    get_json(M.flat_container .. id:lower() .. "/index.json", function(data, err)
       local latest = data and data.versions and semver.max(data.versions, opts.prerelease)
       if latest then
         on_result(id, latest, data.versions)
+      elseif err == "failed" and opts.on_failed then
+        opts.on_failed(id)
       end
       done()
     end)
@@ -91,16 +133,33 @@ end
 
 ---@type NugetAdvisoryDb?
 local db_cache
+---@type fun(db: NugetAdvisoryDb?)[]? callers waiting for the download under way
+local db_waiting
 
---- The nuget.org vulnerability database: the base file plus the latest update, merged.
+--- The nuget.org vulnerability database: the base file plus the latest update, merged. It is
+--- downloaded once for every caller asking meanwhile, and kept only when complete: nil after a
+--- failure, so the next call tries again.
 ---@param cb fun(db: NugetAdvisoryDb?)
 function M.advisories(cb)
   if db_cache then
     return cb(db_cache)
   end
+  if db_waiting then
+    table.insert(db_waiting, cb)
+    return
+  end
+  db_waiting = { cb }
+  local function finish(db)
+    db_cache = db
+    local cbs = db_waiting or {}
+    db_waiting = nil
+    for _, fn in ipairs(cbs) do
+      fn(db)
+    end
+  end
   get_json(M.vulnerability_index, function(index)
     if not index then
-      return cb(nil)
+      return finish(nil)
     end
     local files = {}
     for _, entry in ipairs(index) do
@@ -110,7 +169,7 @@ function M.advisories(cb)
     end
     local db, pending = {}, #files
     if pending == 0 then
-      return cb(nil)
+      return finish(nil)
     end
     local failed = false
     for _, url in ipairs(files) do
@@ -132,8 +191,7 @@ function M.advisories(cb)
         end
         pending = pending - 1
         if pending == 0 then
-          db_cache = not failed and db or nil
-          cb(db_cache)
+          finish(not failed and db or nil)
         end
       end)
     end
