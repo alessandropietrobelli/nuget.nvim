@@ -26,6 +26,12 @@ M.default_config = {
     vulnerable = false,
     deprecated = false,
   },
+  updates = {
+    -- The biggest update `U` makes: "major" updates everything to its latest version, "minor"
+    -- stays on each package's major version, "patch" also on its minor one. A package with
+    -- nothing within the limit is skipped. Change it for the session with `b` (Updates tab).
+    max_bump = "major",
+  },
   search = {
     -- Results per page
     take = 30,

@@ -19,6 +19,7 @@ local M = {}
 ---@field projects table<string, NugetProjectRef> direct references, by project path
 ---@field transitive table<string, string> transitive only: project path -> resolved version
 ---@field latest string? from the outdated report
+---@field available string[]? every version nuget.org lists, when it was asked
 ---@field vulnerabilities NugetVulnerability[]
 ---@field vulnerable_in table<string, true> projects whose resolved version is vulnerable
 ---@field deprecation {reasons: string[], alternative: string?}?
@@ -159,12 +160,19 @@ function M.apply(model, kind, report)
 end
 
 --- A latest version learned from nuget.org before the outdated report; the report replaces it.
+--- The versions nuget.org lists are kept either way: the outdated report names only the latest
+--- one, and a limited update (#1) needs the others.
 ---@param model NugetModel
 ---@param id string
 ---@param latest string
-function M.hint_latest(model, id, latest)
+---@param versions string[]?
+function M.hint_latest(model, id, latest, versions)
   local pkg = model.packages[id:lower()]
-  if not pkg or model.loaded.outdated then
+  if not pkg then
+    return
+  end
+  pkg.available = versions or pkg.available
+  if model.loaded.outdated then
     return
   end
   pkg.latest, pkg.latest_hint = latest, true
@@ -276,6 +284,68 @@ end
 ---@return boolean
 function M.has_update(pkg)
   return pkg.latest ~= nil and #M.projects_below(pkg, pkg.latest) > 0
+end
+
+--- The version an update starts from: the lowest one among the projects it would change, so
+--- that projects at different versions are judged by the biggest jump. Nil without an update.
+---@param pkg NugetPackage
+---@return string?
+function M.update_base(pkg)
+  if not pkg.latest then
+    return nil
+  end
+  local base
+  for _, path in ipairs(M.projects_below(pkg, pkg.latest)) do
+    local ref = pkg.projects[path]
+    local v = semver.effective(ref.requested, ref.resolved)
+    if v and (not base or semver.compare(v, base) < 0) then
+      base = v
+    end
+  end
+  return base
+end
+
+--- What kind of update the latest version is: patch, minor or major. Nil without an update, or
+--- when a project's version cannot be read.
+---@param pkg NugetPackage
+---@return NugetBump?
+function M.bump(pkg)
+  local base = M.update_base(pkg)
+  return base and semver.bump(base, pkg.latest) or nil
+end
+
+--- The version to update to when updates are limited to `max_bump`: the latest one when it is
+--- within the limit, otherwise the highest the limit allows. Nil when there is none; then the
+--- second value says whether that is known (true) or the versions were never listed (false),
+--- as for a package of a private feed before they are fetched.
+---@param pkg NugetPackage
+---@param max_bump NugetBump
+---@param include_prerelease boolean?
+---@return string?, boolean
+function M.update_target(pkg, max_bump, include_prerelease)
+  if not M.has_update(pkg) then
+    return nil, true
+  end
+  local bump = M.bump(pkg)
+  if not bump or semver.within(bump, max_bump) then
+    return pkg.latest, true
+  end
+  if not pkg.available then
+    return nil, false
+  end
+  return semver.highest_within(pkg.available, M.update_base(pkg), max_bump, include_prerelease), true
+end
+
+--- For a package whose latest version is a major update, the highest update that stays on the
+--- same major: the safe choice offered next to it. Nil otherwise.
+---@param pkg NugetPackage
+---@param include_prerelease boolean?
+---@return string?
+function M.safe_update(pkg, include_prerelease)
+  if M.bump(pkg) ~= "major" then
+    return nil
+  end
+  return (M.update_target(pkg, "minor", include_prerelease))
 end
 
 ---@param pkg NugetPackage

@@ -171,6 +171,72 @@ describe("window", function()
     assert.matches("package Serilog %-%-version 4%.4%.0", calls[1])
   end)
 
+  -- U under a limit (#1). The fake dotnet lists only 4.4.0 for any package, so Serilog, whose
+  -- versions the window never had, is fetched and then skipped.
+  it("limits U to updates within the major version, and says what it skips", function()
+    require("nuget").setup({
+      solution = dir .. "/A.sln",
+      details = { fetch = false },
+      fast = false,
+      updates = { max_bump = "minor" },
+    })
+    require("nuget").open({ tab = "updates" })
+    local s = wait_loaded()
+    s.model.packages["newtonsoft.json"].available = { "12.0.1", "12.0.3", "13.0.1", "13.0.4" }
+    local prompt
+    local select = vim.ui.select
+    ---@diagnostic disable-next-line: duplicate-set-field
+    vim.ui.select = function(items, opts, on_choice)
+      prompt = opts.prompt
+      on_choice(items[1])
+    end
+    ui.actions.update_all()
+    local done = vim.wait(5000, function()
+      return vim.fn.filereadable(dir .. "/calls.log") == 1
+    end, 20)
+    vim.ui.select = select
+    assert.is_true(done, "nothing was updated")
+    assert.equals("1 patch: Newtonsoft.Json → 12.0.3 · skipped, ≤ minor: Serilog", prompt)
+    local calls = vim.fn.readfile(dir .. "/calls.log")
+    assert.equals(1, #calls, "only Api, which is below 12.0.3")
+    assert.matches("package Newtonsoft%.Json %-%-version 12%.0%.3", calls[1])
+  end)
+
+  it("cycles the limit of U with b, and shows it in the hints", function()
+    require("nuget").open({ tab = "updates" })
+    local s = wait_loaded()
+    local function hints()
+      return table.concat(vim.api.nvim_buf_get_lines(s.layout.header.buf, 0, -1, false), "\n")
+    end
+    assert.matches("U update marked/all · b limit", hints())
+    ui.actions.bump_limit()
+    assert.equals("minor", s.max_bump)
+    assert.matches("U update marked/all %(≤ minor%)", hints())
+    ui.actions.bump_limit()
+    ui.actions.bump_limit()
+    assert.equals("major", s.max_bump)
+  end)
+
+  it("falls back to major updates for a limit it does not know", function()
+    local warnings = {}
+    local notify = vim.notify
+    ---@diagnostic disable-next-line: duplicate-set-field
+    vim.notify = function(msg)
+      table.insert(warnings, msg)
+    end
+    require("nuget").setup({
+      solution = dir .. "/A.sln",
+      details = { fetch = false },
+      fast = false,
+      updates = { max_bump = "minro" },
+    })
+    require("nuget").open()
+    local s = wait_loaded()
+    vim.notify = notify
+    assert.equals("major", s.max_bump)
+    assert.matches("updates.max_bump must be", warnings[1])
+  end)
+
   it("searches from the Browse tab", function()
     require("nuget").open({ query = "Serilog" })
     local s = wait_loaded()

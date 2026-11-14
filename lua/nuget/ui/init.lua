@@ -37,6 +37,7 @@ local SPINNER = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇",
 ---@field marks table<string, true>
 ---@field search NugetSearchState
 ---@field prerelease boolean
+---@field max_bump NugetBump the biggest update `U` makes (#1)
 ---@field rows NugetLine[]
 ---@field meta NugetMetadata?
 ---@field meta_key string?
@@ -92,10 +93,33 @@ local function spinner()
   return SPINNER[math.floor(uv.hrtime() / 1e8) % #SPINNER + 1]
 end
 
+local BUMP_ORDER = { "major", "minor", "patch" }
+
+--- `updates.max_bump` as configured, or "major" with a warning when it is not a known value.
+---@param value any
+---@return NugetBump
+local function valid_max_bump(value)
+  if value == nil or vim.tbl_contains(BUMP_ORDER, value) then
+    return value or "major"
+  end
+  vim.notify(
+    ('updates.max_bump must be "major", "minor" or "patch", not %s: using "major"'):format(vim.inspect(value)),
+    vim.log.levels.WARN,
+    { title = "NuGet" }
+  )
+  return "major"
+end
+
+--- How the limit reads in the hints and messages: "≤ minor", nothing for "major".
+local function limit_label()
+  return S.max_bump ~= "major" and ("≤ " .. S.max_bump) or nil
+end
+
 local HINTS = {
   browse = "/ search · ⏎ install · v version · ] more · o nuget.org · p prerelease · ? help · q close",
   installed = "/ filter · ⏎ actions · u update · v version · i add to projects · d remove · ? help · q close",
-  updates = "␣ mark · u update · U update marked/all · v version · p prerelease · ? help · q close",
+  updates = "␣ mark · u update · U update marked/all%s · b limit · v version · p prerelease"
+    .. " · ? help · q close",
   consolidate = "⏎ consolidate · v pick version · / filter · ? help · q close",
 }
 
@@ -176,7 +200,12 @@ local function render_header()
     table.insert(chunks, { "  +prerelease", "NugetUpdate" })
   end
   b:add(chunks)
-  b:add({ { " " .. HINTS[S.tab], "NugetMuted" } })
+  local hint = HINTS[S.tab]
+  if S.tab == "updates" then
+    local limit = limit_label()
+    hint = hint:format(limit and (" (" .. limit .. ")") or "")
+  end
+  b:add({ { " " .. hint, "NugetMuted" } })
   layout.set(S.layout.header.buf, b.lines)
 end
 
@@ -211,6 +240,7 @@ local function render_details()
     icons = S.config.icons,
     meta = S.meta or nil,
     meta_loading = S.meta == nil and key ~= nil and S.config.details.fetch,
+    prerelease = S.prerelease,
   }, width)
   layout.set(S.layout.details.buf, lines)
 end
@@ -229,6 +259,8 @@ local function render_list()
     marks = S.marks,
     search = S.search,
     icons = S.config.icons,
+    max_bump = S.max_bump,
+    prerelease = S.prerelease,
   }, width)
   layout.set(S.layout.list.buf, S.rows)
 
@@ -351,9 +383,9 @@ local function quick_checks(generation, m, on_complete)
   S.loading.fast_latest = true
   table.insert(
     S.cancels,
-    fast.latest(ids, { prerelease = S.prerelease, concurrency = concurrency }, function(id, latest)
+    fast.latest(ids, { prerelease = S.prerelease, concurrency = concurrency }, function(id, latest, versions)
       if current() then
-        model.hint_latest(m, id, latest)
+        model.hint_latest(m, id, latest, versions)
         render_soon()
       end
     end, function()
@@ -709,12 +741,20 @@ local function pick_version(id, cb)
     local pkg = S.model.packages[id:lower()]
     local installed = pkg and model.versions(pkg) or {}
     local latest = semver.max(versions, S.prerelease)
+    -- The safe choice next to a major update: the highest that keeps the major version
+    local base = pkg and model.update_base(pkg)
+    local highest_minor = base
+      and semver.bump(base, latest or "") == "major"
+      and semver.highest_within(versions, base, "minor", S.prerelease)
     vim.ui.select(versions, {
       prompt = id .. " version",
       format_item = function(v)
         local tags = {}
         if v == latest then
           table.insert(tags, "latest")
+        end
+        if v == highest_minor then
+          table.insert(tags, "highest minor")
         end
         if vim.tbl_contains(installed, v) then
           table.insert(tags, "installed")
@@ -930,6 +970,42 @@ function actions.focus_input()
   vim.cmd("startinsert!")
 end
 
+--- Menu entries updating `pkg`: to the latest version, labelled with its kind, and to `safe`,
+--- the highest that keeps the major version, when there is one.
+local function update_entries(pkg, safe)
+  local entries = {}
+  local bump = model.bump(pkg)
+  table.insert(entries, {
+    "Update to " .. pkg.latest .. (bump and (" (" .. bump .. ")") or ""),
+    function()
+      update(pkg, pkg.latest)
+    end,
+  })
+  if safe then
+    table.insert(entries, {
+      "Update to " .. safe .. " (highest " .. semver.bump(model.update_base(pkg), safe) .. ")",
+      function()
+        update(pkg, safe)
+      end,
+    })
+  end
+  return entries
+end
+
+--- Ask between the latest version of `pkg`, a major update, and `safe`.
+local function choose_update(pkg, safe)
+  vim.ui.select(update_entries(pkg, safe), {
+    prompt = pkg.id,
+    format_item = function(entry)
+      return entry[1]
+    end,
+  }, function(choice)
+    if choice then
+      choice[2]()
+    end
+  end)
+end
+
 function actions.primary()
   if busy_guard() then
     return
@@ -945,20 +1021,20 @@ function actions.primary()
   if not model.is_direct(pkg) then
     return install_latest(pkg.id)
   end
+  local safe = model.safe_update(pkg, S.prerelease)
   if S.tab == "updates" then
-    return update(pkg, pkg.latest)
+    if not safe then
+      return update(pkg, pkg.latest)
+    end
+    -- A major update: the safe choice one key away (#1)
+    return choose_update(pkg, safe)
   elseif S.tab == "consolidate" then
     return consolidate(pkg)
   end
   -- Installed: offer what makes sense for this package
   local menu = {}
   if pkg.latest and model.has_update(pkg) then
-    table.insert(menu, {
-      "Update to " .. pkg.latest,
-      function()
-        update(pkg, pkg.latest)
-      end,
-    })
+    vim.list_extend(menu, update_entries(pkg, safe))
   end
   table.insert(menu, { "Choose version…", actions.version })
   if model.is_inconsistent(pkg) then
@@ -1013,6 +1089,75 @@ function actions.update()
   update(pkg, pkg.latest)
 end
 
+--- The confirmation of `U`: the targets grouped by kind, majors last, and what the limit skips.
+---@param groups table<NugetBump, {pkg: NugetPackage, version: string}[]>
+---@param skipped NugetPackage[]
+---@return string
+local function update_all_prompt(groups, skipped)
+  local parts = {}
+  for _, bump in ipairs({ "patch", "minor", "major" }) do
+    local list = groups[bump]
+    if #list > 0 then
+      local names = vim.tbl_map(function(t)
+        return t.pkg.id .. " → " .. t.version
+      end, list)
+      table.insert(parts, ("%d %s: %s"):format(#list, bump, table.concat(names, ", ")))
+    end
+  end
+  if #skipped > 0 then
+    local names = vim.tbl_map(function(p)
+      return p.id
+    end, skipped)
+    table.insert(parts, ("skipped, %s: %s"):format(limit_label(), table.concat(names, ", ")))
+  end
+  return table.concat(parts, " · ")
+end
+
+--- Update `targets` within the current limit, after confirmation.
+---@param targets NugetPackage[]
+local function confirm_update_all(targets)
+  local groups, skipped, count = { patch = {}, minor = {}, major = {} }, {}, 0
+  for _, pkg in ipairs(targets) do
+    local version = model.update_target(pkg, S.max_bump, S.prerelease)
+    local bump = version and semver.bump(model.update_base(pkg) or "", version)
+    if version and bump then
+      table.insert(groups[bump], { pkg = pkg, version = version })
+      count = count + 1
+    elseif version then
+      -- A project's version cannot be read: it still updates, counted with the majors
+      table.insert(groups.major, { pkg = pkg, version = version })
+      count = count + 1
+    else
+      table.insert(skipped, pkg)
+    end
+  end
+  if count == 0 then
+    notify(
+      ("Nothing to update %s: %d package%s would need a bigger update"):format(
+        limit_label() or "",
+        #skipped,
+        #skipped == 1 and "" or "s"
+      )
+    )
+    return
+  end
+  local label = ("Update %d package%s"):format(count, count == 1 and "" or "s")
+  vim.ui.select({ label, "Cancel" }, { prompt = update_all_prompt(groups, skipped) }, function(choice)
+    if choice ~= label then
+      return
+    end
+    -- One combined list, so a restore after shared-file edits happens once at the end
+    local steps = {}
+    for _, bump in ipairs({ "patch", "minor", "major" }) do
+      for _, t in ipairs(groups[bump]) do
+        vim.list_extend(steps, plan.set_version(t.pkg, t.version, model.projects_below(t.pkg, t.version)))
+      end
+    end
+    S.marks = {}
+    run_ops(step_ops(steps), ("Updated %d package%s"):format(count, count == 1 and "" or "s"))
+  end)
+end
+
 function actions.update_all()
   if busy_guard() then
     return
@@ -1026,26 +1171,46 @@ function actions.update_all()
     notify(checking_updates() and "Still checking for updates…" or "Everything is up to date")
     return
   end
-  local label = ("Update %d package%s"):format(#targets, #targets == 1 and "" or "s")
-  vim.ui.select({ label, "Cancel" }, {
-    prompt = table.concat(
-      vim.tbl_map(function(p)
-        return p.id .. " → " .. p.latest
-      end, targets),
-      ", "
-    ),
-  }, function(choice)
-    if choice ~= label then
-      return
+  -- Under a limit, a package whose versions nuget.org never listed (a private feed, or the
+  -- quick checks turned off) and whose latest is beyond it needs its versions first
+  local missing = vim.tbl_filter(function(pkg)
+    local version, known = model.update_target(pkg, S.max_bump, S.prerelease)
+    return not version and not known
+  end, targets)
+  if #missing == 0 then
+    return confirm_update_all(targets)
+  end
+  notify(("Fetching the versions of %d package%s…"):format(#missing, #missing == 1 and "" or "s"))
+  local generation = S.generation
+  fast.each_limited(missing, 4, function(pkg, done)
+    cli.versions(
+      pkg.id,
+      { prerelease = S.prerelease, sources = S.config.sources, cwd = vim.fs.dirname(S.target.path) },
+      function(versions, problems)
+        report_problems(problems)
+        -- Listed now, even when empty: a package with none is skipped, not fetched again
+        pkg.available = versions
+        done()
+      end
+    )
+  end, function()
+    if is_open() and S.generation == generation then
+      confirm_update_all(targets)
     end
-    -- One combined list, so a restore after shared-file edits happens once at the end
-    local steps = {}
-    for _, pkg in ipairs(targets) do
-      vim.list_extend(steps, plan.set_version(pkg, pkg.latest, model.projects_below(pkg, pkg.latest)))
-    end
-    S.marks = {}
-    run_ops(step_ops(steps), ("Updated %d package%s"):format(#targets, #targets == 1 and "" or "s"))
   end)
+end
+
+--- `b`: the biggest update `U` makes, cycled for the session: major, minor, patch.
+function actions.bump_limit()
+  local i = 1
+  for n, bump in ipairs(BUMP_ORDER) do
+    if bump == S.max_bump then
+      i = n
+    end
+  end
+  S.max_bump = BUMP_ORDER[i % #BUMP_ORDER + 1]
+  notify(S.max_bump == "major" and "U updates to the latest versions" or ("U updates up to " .. S.max_bump))
+  render()
 end
 
 function actions.version()
@@ -1179,6 +1344,7 @@ function actions.help()
     "i           install in projects (Browse, or add to more projects)",
     "u           update to the latest version",
     "U           update the marked packages, or all of them (Updates)",
+    "b           limit U to minor / patch updates (Updates)",
     "␣           mark for U (Updates)",
     "v           pick a version",
     "d           remove from projects",
@@ -1279,6 +1445,7 @@ local function set_keymaps()
   map(list, "i", actions.install)
   map(list, "u", actions.update)
   map(list, "U", actions.update_all)
+  map(list, "b", actions.bump_limit)
   map(list, "v", actions.version)
   map(list, "d", actions.remove)
   map(list, "<Space>", actions.mark)
@@ -1413,6 +1580,7 @@ function M.open(config, target, opts)
     marks = {},
     search = { query = "", results = {}, loading = false, more = false, skip = 0 },
     prerelease = config.prerelease,
+    max_bump = valid_max_bump(config.updates and config.updates.max_bump),
     rows = {},
     hint_project = hint_project,
     augroup = vim.api.nvim_create_augroup("nuget_ui", { clear = true }),

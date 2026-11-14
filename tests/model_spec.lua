@@ -221,3 +221,45 @@ describe("cli output", function()
     assert.matches("Unable to find package Nope", msg)
   end)
 end)
+
+describe("update kinds (#1)", function()
+  -- Newtonsoft.Json: 12.0.1 in Api, 13.0.1 in Lib, latest 13.0.4. Serilog: 2.10.0 and 3.0.0,
+  -- latest 4.4.0.
+  local function pkg(m, id)
+    return m.packages[id:lower()]
+  end
+
+  it("judges an update by the lowest version it changes", function()
+    local m = solution_model()
+    assert.equals("12.0.1", model.update_base(pkg(m, "Newtonsoft.Json")))
+    assert.equals("major", model.bump(pkg(m, "Newtonsoft.Json")), "12.0.1 → 13.0.4, though Lib only gets a patch")
+    assert.is_nil(model.bump(pkg(m, "Microsoft.Azure.Storage.Blob")), "no update")
+  end)
+
+  it("keeps the latest version when it is within the limit", function()
+    local m = solution_model()
+    assert.equals("13.0.4", (model.update_target(pkg(m, "Newtonsoft.Json"), "major")))
+  end)
+
+  it("stays on the major version under a minor limit, once the versions are known", function()
+    local m = solution_model()
+    local json = pkg(m, "Newtonsoft.Json")
+    local version, known = model.update_target(json, "minor")
+    assert.is_nil(version)
+    assert.is_false(known, "the outdated report names only the latest version")
+
+    model.hint_latest(m, "Newtonsoft.Json", "13.0.4", { "12.0.1", "12.0.3", "13.0.1", "13.0.4" })
+    assert.equals("13.0.4", json.latest, "the outdated report still decides the latest")
+    assert.equals("12.0.3", (model.update_target(json, "minor")))
+    assert.equals("12.0.3", model.safe_update(json))
+  end)
+
+  it("knows when a limit leaves nothing to update", function()
+    local m = solution_model()
+    model.hint_latest(m, "Serilog", "4.4.0", { "2.10.0", "3.0.0", "4.4.0" })
+    local version, known = model.update_target(pkg(m, "Serilog"), "minor")
+    assert.is_nil(version)
+    assert.is_true(known)
+    assert.is_nil(model.safe_update(pkg(m, "Serilog")))
+  end)
+end)

@@ -70,6 +70,38 @@ describe("list view", function()
     assert.matches("13%.0%.1 %(Lib%) · 12%.0%.1 %(Api%)", t[1])
   end)
 
+  it("labels each update with its kind, and offers the same major next to a major (#1)", function()
+    local s = state("updates")
+    s.model.packages["newtonsoft.json"].available = { "12.0.1", "12.0.3", "13.0.1", "13.0.4" }
+    local lines = view.list(s, 140)
+    check_highlights(lines)
+    local json = lines[1]
+    assert.matches("↑ 13%.0%.4 major · 12%.0%.3 patch", json.text)
+    assert.matches("↑ 4%.4%.0 major", lines[2].text)
+    assert.not_matches("·", lines[2].text, "Serilog's versions are not known")
+    local groups = vim.tbl_map(function(h)
+      return h[3]
+    end, json.hl)
+    assert.is_true(vim.tbl_contains(groups, "NugetBumpMajor"))
+  end)
+
+  it("dims the updates U skips under a limit, and only those", function()
+    local s = state("updates", { max_bump = "minor" })
+    s.model.packages["newtonsoft.json"].available = { "12.0.1", "12.0.3", "13.0.1", "13.0.4" }
+    s.model.packages["serilog"].available = { "2.10.0", "3.0.0", "4.4.0" }
+    local lines = view.list(s, 140)
+    local function dimmed(line)
+      for _, h in ipairs(line.hl) do
+        if h[3] == "NugetId" then
+          return false
+        end
+      end
+      return true
+    end
+    assert.is_false(dimmed(lines[1]), "Newtonsoft.Json goes to 12.0.3")
+    assert.is_true(dimmed(lines[2]), "Serilog has only a major")
+  end)
+
   it("filters by id", function()
     local t = texts(view.list(state("installed", { filter = "seri" }), 100))
     assert.equals(1, #t)
@@ -158,6 +190,15 @@ describe("details view", function()
       { targetFramework = "net6.0" },
     },
   })
+
+  it("says what kind of update the latest is, and the same-major choice", function()
+    local s = state("updates")
+    local pkg = s.model.packages["newtonsoft.json"]
+    pkg.available = { "12.0.1", "12.0.3", "13.0.1", "13.0.4" }
+    local text = table.concat(texts(view.details({ kind = "package", package = pkg }, s, 60)), "\n")
+    assert.matches("Latest 13%.0%.4  major update", text)
+    assert.matches("Same major 12%.0%.3", text)
+  end)
 
   it("shows installs, vulnerabilities and metadata", function()
     local s = state("installed")

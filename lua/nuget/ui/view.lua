@@ -127,6 +127,29 @@ end
 
 --- Whether the shared-version mark tells anything: only when some packages have their version
 --- in a shared file and others in the projects. When all of them do, it is on every row.
+local BUMP_HL = { major = "NugetBumpMajor", minor = "NugetBumpMinor", patch = "NugetBumpPatch" }
+
+--- `↑ 13.0.4 major`, and for a major update the highest one that keeps the major version,
+--- `· 12.0.3 minor`: what an update would change, and the safe choice next to it (#1).
+---@param pkg NugetPackage
+---@param icons table
+---@param include_prerelease boolean?
+---@return {[1]: string, [2]: string?}[]
+function M.update_chunks(pkg, icons, include_prerelease)
+  local chunks = { { " " .. icons.update .. " " .. pkg.latest, "NugetUpdate" } }
+  local bump = model.bump(pkg)
+  if bump then
+    table.insert(chunks, { " " .. bump, BUMP_HL[bump] })
+  end
+  local safe = model.safe_update(pkg, include_prerelease)
+  if safe then
+    local safe_bump = semver.bump(model.update_base(pkg), safe)
+    table.insert(chunks, { " · " .. safe, "NugetVersion" })
+    table.insert(chunks, { " " .. safe_bump, BUMP_HL[safe_bump] })
+  end
+  return chunks
+end
+
 ---@param m NugetModel
 ---@return boolean
 local function mixed_origins(m)
@@ -172,6 +195,8 @@ end
 ---@field marks table<string, true> lower-case ids
 ---@field search {results: NugetSearchResult[], loading: boolean, query: string, more: boolean, problems: string[]}
 ---@field icons table
+---@field max_bump NugetBump? the limit of `U`; rows it skips are dimmed
+---@field prerelease boolean?
 
 --- Rows of the list pane for the current tab.
 ---@param s NugetViewState
@@ -291,11 +316,21 @@ function M.list(s, width)
     else
       table.insert(chunks, { table.concat(versions, ", "), "NugetVersion" })
       if pkg.latest and model.has_update(pkg) then
-        table.insert(chunks, { " " .. icons.update .. " " .. pkg.latest, "NugetUpdate" })
+        vim.list_extend(chunks, M.update_chunks(pkg, icons, s.prerelease))
       end
       if s.tab == "updates" then
         local n = #model.projects_below(pkg, pkg.latest)
         table.insert(chunks, { ("  %d project%s"):format(n, n == 1 and "" or "s"), "NugetMuted" })
+        -- A package `U` skips under the current limit (#1) is dimmed, all of it
+        local max_bump = s.max_bump or "major"
+        local target, known = model.update_target(pkg, max_bump, s.prerelease)
+        if not target and known then
+          for _, chunk in ipairs(chunks) do
+            if chunk[2] and chunk[2] ~= "NugetMarked" then
+              chunk[2] = "NugetMuted"
+            end
+          end
+        end
       end
     end
     vim.list_extend(chunks, badges(pkg, icons, show_central))
@@ -332,7 +367,7 @@ end
 
 --- Details pane for a list item.
 ---@param item table?
----@param s {model: NugetModel, icons: table, meta: NugetMetadata?, meta_loading: boolean}
+---@param s {model: NugetModel, icons: table, meta: NugetMetadata?, meta_loading: boolean, prerelease: boolean?}
 ---@param width integer
 ---@return NugetLine[]
 function M.details(item, s, width)
@@ -353,7 +388,16 @@ function M.details(item, s, width)
   b:add({ { id, "NugetTitle" } })
   local latest = (pkg and pkg.latest) or (result and result.version)
   if latest then
-    b:add({ { "Latest ", "NugetLabel" }, { latest, "NugetLatest" } })
+    local chunks = { { "Latest ", "NugetLabel" }, { latest, "NugetLatest" } }
+    local bump = pkg and pkg.latest and model.bump(pkg)
+    if bump then
+      table.insert(chunks, { "  " .. bump .. " update", BUMP_HL[bump] })
+    end
+    b:add(chunks)
+    local safe = pkg and model.safe_update(pkg, s.prerelease)
+    if safe then
+      b:add({ { "Same major ", "NugetLabel" }, { safe, "NugetVersion" } })
+    end
   end
   if result and result.source then
     b:add({ { "Source ", "NugetLabel" }, { result.source, "NugetSource" } })

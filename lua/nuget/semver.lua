@@ -174,4 +174,54 @@ function M.sort_desc(versions)
   return copy
 end
 
+---@alias NugetBump "major"|"minor"|"patch"
+
+local BUMP_RANK = { patch = 1, minor = 2, major = 3 }
+
+--- What kind of update going from `from` to `to` is: "major" when the first number changes,
+--- "minor" for the second, "patch" for anything after it (the third or the legacy fourth
+--- number, or only the prerelease label). Nil when `to` is not higher or either does not parse.
+---@param from string
+---@param to string
+---@return NugetBump?
+function M.bump(from, to)
+  local a, b = M.parse(from), M.parse(to)
+  if not a or not b or M.compare(a, b) >= 0 then
+    return nil
+  end
+  if a.parts[1] ~= b.parts[1] then
+    return "major"
+  elseif a.parts[2] ~= b.parts[2] then
+    return "minor"
+  end
+  return "patch"
+end
+
+--- Whether an update of kind `bump` is allowed under the limit `max_bump`.
+---@param bump NugetBump
+---@param max_bump NugetBump
+---@return boolean
+function M.within(bump, max_bump)
+  return BUMP_RANK[bump] <= BUMP_RANK[max_bump]
+end
+
+--- The highest of `versions` above `from` whose update from it is no bigger than `max_bump`:
+--- with "minor", the highest of the same major; with "patch", of the same major and minor.
+--- Prereleases only with `include_prerelease`. Nil when there is none.
+---@param versions string[]
+---@param from string
+---@param max_bump NugetBump
+---@param include_prerelease boolean?
+---@return string?
+function M.highest_within(versions, from, max_bump, include_prerelease)
+  local allowed = {}
+  for _, v in ipairs(versions) do
+    local bump = M.bump(from, v)
+    if bump and M.within(bump, max_bump) then
+      table.insert(allowed, v)
+    end
+  end
+  return M.max(allowed, include_prerelease)
+end
+
 return M
