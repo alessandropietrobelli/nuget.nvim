@@ -19,8 +19,8 @@ different versions across projects, a deprecated one:
 
 ```
 Microsoft.Azure.Storage.Blob 11.2.3  deprecated
-Newtonsoft.Json              13.0.1, 12.0.1 ↑ 13.0.4  High ≠
-Serilog                      3.0.0, 2.10.0 ↑ 4.4.0 ≠
+Newtonsoft.Json              13.0.1, 12.0.1 ↑ 13.0.4 major · 12.0.3 patch  High ≠
+Serilog                      3.0.0, 2.10.0 ↑ 4.4.0 major · 2.12.0 minor ≠
 ```
 
 - **Browse** — search every configured feed as you type, see the details, install into the
@@ -28,8 +28,9 @@ Serilog                      3.0.0, 2.10.0 ↑ 4.4.0 ≠
 - **Installed** — every package of the solution with its versions per project, a newer version
   when there is one, vulnerabilities, deprecations, and the vulnerable packages that only come in
   transitively
-- **Updates** — what can be updated, vulnerable packages first; update one, the marked ones, or
-  all of them
+- **Updates** — what can be updated, vulnerable packages first, each update labelled patch, minor
+  or major, with the highest on the same major next to a major one; update one, the
+  marked ones, or all of them, optionally only within the major or minor version
 - **Consolidate** — packages referenced at different versions across projects, and which project
   has which; bring them to one version
 - **Wherever the version is written** — in the project, in `Directory.Packages.props` (central
@@ -110,11 +111,12 @@ when there are several). Without one, the projects below the current directory a
 |---|---|
 | `1`–`4`, `<Tab>` / `<S-Tab>` | Switch tab |
 | `/` | Search (Browse) or filter by id (other tabs); `⏎` or `<Esc>` back to the list |
-| `⏎` | The obvious action: install (Browse), a menu (Installed), update (Updates), consolidate (Consolidate) |
+| `⏎` | The obvious action: install (Browse), a menu (Installed), update (Updates: when the latest is a major update, a choice between it and the highest on the same major, or a version to pick when the versions are not known), consolidate (Consolidate) |
 | `i` | Install in projects — or add an installed package to more projects |
 | `u` | Update to the latest version |
 | `U` | Update the marked packages, or all of them (Updates) |
 | `<Space>` | Mark for `U` (Updates) |
+| `b` | Limit `U` to updates within the major version, then the minor version, then none again (Updates) |
 | `v` | Pick a version — to install, update, downgrade or consolidate on |
 | `d` | Remove from projects |
 | `]` | More search results |
@@ -124,6 +126,17 @@ when there are several). Without one, the projects below the current directory a
 | `J` / `K` | Scroll the details |
 | `?` | All keys |
 | `q` / `<Esc>` | Close |
+
+An update is labelled by the biggest jump it makes in any project: Newtonsoft.Json at 12.0.1 in
+one project and 13.0.1 in another is a major update to 13.0.4. Under a limit, set with `b` or
+`updates.max_bump`, `U` takes each project to the highest version the limit allows from the one
+it is at: within the major version, the first goes to the highest 12.x and the second to 13.0.4.
+Packages the limit allows nothing for are skipped and dimmed in the list. The confirmation groups
+the updates as patch, minor and major, and names what it skips, the packages whose versions could
+not be fetched, and those whose version cannot be read (a `$(Property)`, labelled `?`). The
+versions come from nuget.org, leaving out the ones their authors unlisted; for a package it does
+not have, `U` asks the feeds first with `dotnet package search`. The highest version on the same
+major shows once the versions are known.
 
 Choosing projects opens a checklist: `<Space>` toggles, `a` toggles all, `⏎` confirms, `q` cancels.
 Changes run one at a time, with progress in the header, and the window reloads when they are done.
@@ -181,6 +194,12 @@ require("nuget").setup({
     vulnerable = false,
     deprecated = false,
   },
+  updates = {
+    -- The biggest update `U` makes: "major" updates everything to its latest version, "minor"
+    -- keeps each project on its major version, "patch" also on its minor one. A package with
+    -- nothing within the limit is skipped. Change it for the session with `b` (Updates tab).
+    max_bump = "major",
+  },
   search = {
     -- Results per page
     take = 30,
@@ -225,6 +244,7 @@ Every group links to a standard one by default, so the window follows your colou
 | `NugetVersion` | `Number` | versions |
 | `NugetLatest` / `NugetInstalled` | `DiagnosticOk` | latest version, installed mark |
 | `NugetUpdate` | `DiagnosticWarn` | newer version available |
+| `NugetBumpMajor` / `Minor` / `Patch` | `DiagnosticWarn` / `Normal` / `Comment` | kind of update |
 | `NugetSeverityLow` / `Moderate` / `High` | `DiagnosticHint` / `DiagnosticWarn` / `DiagnosticError` | advisories (Critical uses High) |
 | `NugetDeprecated` | `DiagnosticWarn` | deprecations |
 | `NugetInconsistent` | `DiagnosticInfo` | versions differ across projects |

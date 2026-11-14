@@ -68,10 +68,11 @@ function M.each_limited(items, limit, fn, on_done)
   }
 end
 
---- Latest version of each package on nuget.org; packages it does not know are skipped.
+--- Latest version of each package on nuget.org, with every version it lists; packages it does
+--- not know are skipped.
 ---@param ids string[]
 ---@param opts {prerelease: boolean, concurrency: integer}
----@param on_result fun(id: string, latest: string)
+---@param on_result fun(id: string, latest: string, versions: string[])
 ---@param on_done fun()
 ---@return {cancel: fun()}
 function M.latest(ids, opts, on_result, on_done)
@@ -79,7 +80,7 @@ function M.latest(ids, opts, on_result, on_done)
     get_json(M.flat_container .. id:lower() .. "/index.json", function(data)
       local latest = data and data.versions and semver.max(data.versions, opts.prerelease)
       if latest then
-        on_result(id, latest)
+        on_result(id, latest, data.versions)
       end
       done()
     end)

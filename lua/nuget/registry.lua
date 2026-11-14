@@ -15,6 +15,7 @@ M.base = "https://api.nuget.org/v3/registration5-gz-semver2/"
 ---@field project_url string?
 ---@field tags string[]
 ---@field published string? date, YYYY-MM-DD
+---@field listed boolean false when the author unlisted the version
 ---@field dependencies {framework: string, packages: string[]}[]
 ---@field deprecation {reasons: string[], alternative: string?, message: string?}?
 
@@ -75,6 +76,7 @@ function M.from_catalog(entry)
     project_url = entry.projectUrl ~= "" and entry.projectUrl or nil,
     tags = tags or {},
     published = type(entry.published) == "string" and entry.published:sub(1, 10) or nil,
+    listed = entry.listed ~= false,
     dependencies = deps,
     deprecation = type(entry.deprecation) == "table" and {
       reasons = entry.deprecation.reasons or {},
@@ -111,11 +113,19 @@ function M.fetch(id, version, cb)
     if not leaf or not leaf.catalogEntry then
       return done(nil)
     end
+    -- The registration leaf says whether the version is listed now; its catalog entry may be older
+    local function from(entry)
+      local meta = M.from_catalog(entry)
+      if type(leaf.listed) == "boolean" then
+        meta.listed = leaf.listed
+      end
+      return meta
+    end
     if type(leaf.catalogEntry) == "table" then
-      return done(M.from_catalog(leaf.catalogEntry))
+      return done(from(leaf.catalogEntry))
     end
     get(leaf.catalogEntry, function(entry)
-      done(entry and M.from_catalog(entry) or nil)
+      done(entry and from(entry) or nil)
     end)
   end)
 end
