@@ -1,6 +1,8 @@
 -- Package metadata from nuget.org (description, license, dependencies…), which the dotnet CLI
 -- does not expose. Two requests per version: the registration leaf, then its catalog entry.
 -- Packages from other feeds simply have no metadata here.
+local fast = require("nuget.fast")
+
 local M = {}
 
 M.base = "https://api.nuget.org/v3/registration5-gz-semver2/"
@@ -23,20 +25,6 @@ M.base = "https://api.nuget.org/v3/registration5-gz-semver2/"
 local cache = {}
 ---@type table<string, fun(meta: NugetMetadata?)[]>
 local waiting = {}
-
----@param url string
----@param cb fun(data: table?)
-local function get(url, cb)
-  vim.system({ "curl", "-sfL", "--compressed", "--max-time", "15", url }, { text = true }, function(result)
-    vim.schedule(function()
-      if result.code ~= 0 then
-        return cb(nil)
-      end
-      local ok, data = pcall(vim.json.decode, result.stdout or "", { luanil = { object = true, array = true } })
-      cb(ok and type(data) == "table" and data or nil)
-    end)
-  end)
-end
 
 ---@param entry table catalog entry
 ---@return NugetMetadata
@@ -87,10 +75,11 @@ function M.from_catalog(entry)
   }
 end
 
---- Metadata of one version; nil when the package is not on nuget.org or the request fails.
+--- Metadata of one version; nil when the package is not on nuget.org or the request fails, and
+--- then `failed` tells the two apart. A failure is not remembered, so the next call asks again.
 ---@param id string
 ---@param version string
----@param cb fun(meta: NugetMetadata?)
+---@param cb fun(meta: NugetMetadata?, failed: boolean?)
 function M.fetch(id, version, cb)
   local key = (id .. "@" .. version):lower()
   if cache[key] ~= nil then
@@ -101,17 +90,19 @@ function M.fetch(id, version, cb)
     return
   end
   waiting[key] = { cb }
-  local function done(meta)
-    cache[key] = meta or false
-    local cbs = waiting[key]
+  local function done(meta, failed)
+    if not failed then
+      cache[key] = meta or false
+    end
+    local cbs = waiting[key] or {}
     waiting[key] = nil
     for _, fn in ipairs(cbs) do
-      fn(meta)
+      fn(meta, failed)
     end
   end
-  get(M.base .. id:lower() .. "/" .. version:lower() .. ".json", function(leaf)
+  fast.get_json(M.base .. id:lower() .. "/" .. version:lower() .. ".json", function(leaf, err)
     if not leaf or not leaf.catalogEntry then
-      return done(nil)
+      return done(nil, err ~= "missing")
     end
     -- The registration leaf says whether the version is listed now; its catalog entry may be older
     local function from(entry)
@@ -124,8 +115,8 @@ function M.fetch(id, version, cb)
     if type(leaf.catalogEntry) == "table" then
       return done(from(leaf.catalogEntry))
     end
-    get(leaf.catalogEntry, function(entry)
-      done(entry and from(entry) or nil)
+    fast.get_json(leaf.catalogEntry, function(entry)
+      done(entry and from(entry) or nil, entry == nil)
     end)
   end)
 end

@@ -82,6 +82,10 @@ commit both together. With [pandoc](https://pandoc.org) installed, from a panvim
 Parts of the README that make no sense in `:help` (the demo) sit between
 `<!-- panvimdoc-ignore-start -->` and `<!-- panvimdoc-ignore-end -->`.
 
+Since 0.3.0 `doc/nuget.txt` has also been edited by hand, mirroring each README change, so it can
+differ in wrapping from what panvimdoc would produce. Either way works: edit both files in the
+same commit, or regenerate it and check the diff.
+
 ## Commit messages
 
 Pull requests are squash-merged, so the pull request title becomes the commit

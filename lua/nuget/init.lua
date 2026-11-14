@@ -34,8 +34,8 @@ M.default_config = {
   },
   inline = {
     -- Show the latest version, vulnerabilities and deprecation at the end of each package line
-    -- in project files and Directory.*.props, from nuget.org (needs curl and `fast`). Toggle it
-    -- for the session with `:Nuget inline`.
+    -- in project files and Directory.*.props, from nuget.org (needs curl, `fast`, and nuget.org
+    -- among `sources`). Toggle it for the session with `:Nuget inline`.
     enabled = false,
     -- Keys, local to those buffers, for `:Nuget update` and `:Nuget version` on the package
     -- under the cursor, e.g. "<leader>nu" and "<leader>nv"

@@ -40,8 +40,8 @@ Serilog                      3.0.0, 2.10.0 ↑ 4.4.0 major · 2.12.0 minor ≠
 - **Details** — description, license, authors, release date, project site, dependencies for the
   frameworks you target, advisories with links, deprecation with its suggested replacement
 - **In project files** — optionally, the latest version, vulnerabilities and deprecation at the
-  end of each package line of a `.csproj` or `Directory.Packages.props`, and the package under
-  the cursor updated right there
+  end of each package line of a `.csproj`, `.fsproj`, `.vbproj` or `Directory.*.props` /
+  `.targets`, and the package under the cursor updated right there
 
 ## How it works
 
@@ -104,7 +104,7 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 | `:Nuget` | Open on the default tab |
 | `:Nuget browse` / `installed` / `updates` / `consolidate` | Open on that tab |
 | `:Nuget <query>` | Open Browse and search for `query` |
-| `:Nuget update` / `version` | In a project file: update the package under the cursor, or pick its version |
+| `:Nuget update` / `version` | In a project file: update the package under the cursor, or pick its version (not to be confused with `:Nuget updates`, the tab) |
 | `:Nuget inline` | Show or hide the versions in project files |
 
 The solution is the `.sln` / `.slnx` in the current directory or the closest parent (you are asked
@@ -149,26 +149,35 @@ Changes run one at a time, with progress in the header, and the window reloads w
 ### In project files
 
 With `inline.enabled = true` (or `:Nuget inline` for the session), `.csproj`, `.fsproj`,
-`.vbproj`, `Directory.Packages.props` and `Directory.Build.props` / `.targets` show at the end of
-each package line what the window would say about it:
+`.vbproj`, `Directory.Packages.props`, `Directory.Build.props` and `Directory.Build.targets` show
+at the end of each package line what the window would say about it. This needs curl, `fast`, and
+nuget.org among `sources`; `:Nuget inline` and `:checkhealth nuget` say when one is missing.
 
 ```
-<PackageReference Include="Newtonsoft.Json" Version="12.0.1" />   ↑ 13.0.4 major · 12.0.3 patch  High
-<PackageReference Include="Serilog" Version="2.10.0" />           ↑ 4.4.0 major · 2.12.0 minor
-<PackageReference Include="Microsoft.Azure.Storage.Blob" Version="11.2.3" />   deprecated
+<PackageReference Include="Newtonsoft.Json" Version="12.0.1" />  ↑ 13.0.4 major · 12.0.3 patch  High
+<PackageReference Include="Serilog" Version="2.10.0" />  ↑ 4.4.0 major · 2.12.0 minor
+<PackageReference Include="Microsoft.Azure.Storage.Blob" Version="11.2.3" />  deprecated
 ```
 
 The answers come from nuget.org in a second or two and are kept for the session; opening a file
-never runs `dotnet list package`. A package that is up to date shows nothing, and so does a
-version written as a `$(Property)`. A `PackageReference` without a version, under central package
-management, shows what its `PackageVersion` says, marked with the central icon. For a range the
-latest version is shown when it falls outside it.
+never runs `dotnet list package`. When nuget.org cannot be reached you are told once, and it is
+asked again when the file changes or is saved; `:Nuget inline` twice, or `r` in the window, asks
+again about everything.
 
-`:Nuget update` updates the package under the cursor to its latest version, asking between it and
-the highest on the same major when it is a major update; `:Nuget version` picks one from the list.
-The version is changed in the buffer, where it is written: undo it with `u`, and it applies once
-you save. On a reference whose version is in `Directory.Packages.props`, both go to that line.
-`inline.keys` maps them in those buffers.
+- A package that is up to date, not vulnerable and not deprecated shows nothing.
+- A prerelease is compared with the prereleases too; other versions only with releases, unless
+  `prerelease` is on.
+- A range shows the latest version when it falls outside it. A floating version (`1.*`) and a
+  version written as a `$(Property)` show nothing.
+- A `PackageReference` without a version, under central package management, shows what its
+  `PackageVersion` says, followed by the central icon when there is something to show.
+
+`:Nuget update` updates the package under the cursor to its latest version, asking between it,
+the highest on the same major and the full list when it is a major update; a range or a floating
+version is replaced with the latest version after asking. `:Nuget version` picks one from the
+list. The version is changed in the buffer, where it is written: undo it with `u`, and it applies
+once you save. On a reference whose version is in `Directory.Packages.props`, both go to that
+line. `inline.keys` maps them in those buffers.
 
 ### Lua API
 
@@ -231,8 +240,8 @@ require("nuget").setup({
   },
   inline = {
     -- Show the latest version, vulnerabilities and deprecation at the end of each package line
-    -- in project files and Directory.*.props, from nuget.org (needs curl and `fast`). Toggle it
-    -- for the session with `:Nuget inline`.
+    -- in project files and Directory.*.props, from nuget.org (needs curl, `fast`, and nuget.org
+    -- among `sources`). Toggle it for the session with `:Nuget inline`.
     enabled = false,
     -- Keys, local to those buffers, for `:Nuget update` and `:Nuget version` on the package
     -- under the cursor, e.g. "<leader>nu" and "<leader>nv"
@@ -272,7 +281,8 @@ require("nuget").setup({
 
 ### Highlights
 
-Every group links to a standard one by default, so the window follows your colour scheme:
+Every group links to a standard one by default, so the window and the versions shown in project
+files follow your colour scheme:
 
 | Group | Default link | |
 |---|---|---|
@@ -304,7 +314,7 @@ Every group links to a standard one by default, so the window follows your colou
 - **Newer versions on private feeds** appear when `dotnet list package --outdated` finishes, which
   on a large solution takes a couple of minutes.
 - **Versions in project files come from nuget.org.** Packages only on private feeds show nothing
-  there; `:Nuget version` still lists their versions, from the feeds.
+  there; `:Nuget update` and `:Nuget version` still work, from the feeds.
 - **`packages.config` projects** are not supported, as `dotnet list package` does not read them.
 - **Where a version is written** is read from the files, not from an MSBuild evaluation:
   conditions on item groups are not decided, and imports other than the `Directory.Build.props`

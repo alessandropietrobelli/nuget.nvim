@@ -40,12 +40,15 @@ function M.check()
 
   if not config.inline.enabled then
     health.info("Versions in project files are off (inline.enabled = false)")
-  elseif require("nuget.fast").enabled(config) then
-    health.ok("Versions in project files are on, from nuget.org")
   else
-    health.warn("Versions in project files are on, but nuget.org cannot be asked", {
-      "They need curl, `fast = true`, and nuget.org among the sources",
-    })
+    local why = require("nuget.fast").why_disabled(config)
+    if why then
+      health.warn("Versions in project files are on, but nuget.org cannot be asked: " .. why, {
+        "They need curl, `fast = true`, and nuget.org among the sources",
+      })
+    else
+      health.ok("Versions in project files are on, from nuget.org")
+    end
   end
 
   local sln = require("nuget.solution")
