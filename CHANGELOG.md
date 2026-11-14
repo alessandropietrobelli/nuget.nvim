@@ -13,14 +13,16 @@ keys may land in a minor release; they will always be listed here.
 
 - Each update is labelled `patch`, `minor` or `major`, majors highlighted, and a
   package whose latest version is a major update also shows the highest one on
-  its current major. `⏎` on it in the Updates tab, and the menu on the
-  Installed tab, offer both; `v` tags it `highest minor`
+  the same major, once its versions are known. `⏎` on it in the Updates tab,
+  and the menu on the Installed tab, offer both; `v` tags it `same major`
   ([#1](https://github.com/alessandropietrobelli/nuget.nvim/issues/1)).
 - `U` can be limited to updates within the major or the minor version: `b` on
   the Updates tab cycles the limit for the session, and `updates.max_bump`
-  sets it (`"major"` by default, as before). Packages with nothing within the
-  limit are dimmed and skipped, and the confirmation groups the updates as
-  patch, minor and major, naming what it skips
+  sets it (`"major"` by default, as before). Each project goes to the highest
+  version the limit allows from the one it is at, leaving out versions their
+  authors unlisted. Packages with nothing within the limit are dimmed and
+  skipped, and the confirmation groups the updates as patch, minor and major,
+  naming what it skips and the packages whose versions could not be fetched
   ([#1](https://github.com/alessandropietrobelli/nuget.nvim/issues/1)).
 
 ## [0.2.0] - 2026-11-02

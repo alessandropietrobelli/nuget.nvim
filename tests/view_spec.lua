@@ -70,7 +70,7 @@ describe("list view", function()
     assert.matches("13%.0%.1 %(Lib%) · 12%.0%.1 %(Api%)", t[1])
   end)
 
-  it("labels each update with its kind, and offers the same major next to a major (#1)", function()
+  it("labels each update with its kind, and offers the same major next to a major", function()
     local s = state("updates")
     s.model.packages["newtonsoft.json"].available = { "12.0.1", "12.0.3", "13.0.1", "13.0.4" }
     local lines = view.list(s, 140)
@@ -100,6 +100,20 @@ describe("list view", function()
     end
     assert.is_false(dimmed(lines[1]), "Newtonsoft.Json goes to 12.0.3")
     assert.is_true(dimmed(lines[2]), "Serilog has only a major")
+
+    -- Versions not known yet: U fetches them, so it is not dimmed
+    s.model.packages["serilog"].available = nil
+    assert.is_false(dimmed(view.list(s, 140)[2]))
+  end)
+
+  it("labels an update ? when no project's version can be read", function()
+    local s = state("updates")
+    for _, ref in pairs(s.model.packages["serilog"].projects) do
+      ref.requested, ref.resolved = "$(SerilogVersion)", nil
+    end
+    local line = view.list(s, 140)[2]
+    check_highlights(line and { line } or {})
+    assert.matches("↑ 4%.4%.0 %?", line.text)
   end)
 
   it("filters by id", function()

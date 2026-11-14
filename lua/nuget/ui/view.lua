@@ -125,12 +125,11 @@ local function badges(pkg, icons, show_central)
   return out
 end
 
---- Whether the shared-version mark tells anything: only when some packages have their version
---- in a shared file and others in the projects. When all of them do, it is on every row.
 local BUMP_HL = { major = "NugetBumpMajor", minor = "NugetBumpMinor", patch = "NugetBumpPatch" }
 
---- `↑ 13.0.4 major`, and for a major update the highest one that keeps the major version,
---- `· 12.0.3 minor`: what an update would change, and the safe choice next to it (#1).
+--- `↑ 13.0.4 major`, and for a major update the highest one on the same major, `· 12.0.3 minor`,
+--- once the versions are known: what an update would change, and the safe choice next to it.
+--- The kind is `?` when no project's version can be read.
 ---@param pkg NugetPackage
 ---@param icons table
 ---@param include_prerelease boolean?
@@ -138,9 +137,7 @@ local BUMP_HL = { major = "NugetBumpMajor", minor = "NugetBumpMinor", patch = "N
 function M.update_chunks(pkg, icons, include_prerelease)
   local chunks = { { " " .. icons.update .. " " .. pkg.latest, "NugetUpdate" } }
   local bump = model.bump(pkg)
-  if bump then
-    table.insert(chunks, { " " .. bump, BUMP_HL[bump] })
-  end
+  table.insert(chunks, bump and { " " .. bump, BUMP_HL[bump] } or { " ?", "NugetMuted" })
   local safe = model.safe_update(pkg, include_prerelease)
   if safe then
     local safe_bump = semver.bump(model.update_base(pkg), safe)
@@ -150,6 +147,8 @@ function M.update_chunks(pkg, icons, include_prerelease)
   return chunks
 end
 
+--- Whether the shared-version mark tells anything: only when some packages have their version
+--- in a shared file and others in the projects. When all of them do, it is on every row.
 ---@param m NugetModel
 ---@return boolean
 local function mixed_origins(m)
@@ -321,10 +320,9 @@ function M.list(s, width)
       if s.tab == "updates" then
         local n = #model.projects_below(pkg, pkg.latest)
         table.insert(chunks, { ("  %d project%s"):format(n, n == 1 and "" or "s"), "NugetMuted" })
-        -- A package `U` skips under the current limit (#1) is dimmed, all of it
-        local max_bump = s.max_bump or "major"
-        local target, known = model.update_target(pkg, max_bump, s.prerelease)
-        if not target and known then
+        -- A package `U` skips under the current limit is dimmed; the badges after it are not
+        local groups, missing = model.update_plan(pkg, s.max_bump or "major", s.prerelease)
+        if #groups == 0 and missing ~= "versions" then
           for _, chunk in ipairs(chunks) do
             if chunk[2] and chunk[2] ~= "NugetMarked" then
               chunk[2] = "NugetMuted"

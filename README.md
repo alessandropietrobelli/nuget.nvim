@@ -20,7 +20,7 @@ different versions across projects, a deprecated one:
 ```
 Microsoft.Azure.Storage.Blob 11.2.3  deprecated
 Newtonsoft.Json              13.0.1, 12.0.1 ↑ 13.0.4 major · 12.0.3 patch  High ≠
-Serilog                      3.0.0, 2.10.0 ↑ 4.4.0 major ≠
+Serilog                      3.0.0, 2.10.0 ↑ 4.4.0 major · 2.12.0 minor ≠
 ```
 
 - **Browse** — search every configured feed as you type, see the details, install into the
@@ -29,7 +29,7 @@ Serilog                      3.0.0, 2.10.0 ↑ 4.4.0 major ≠
   when there is one, vulnerabilities, deprecations, and the vulnerable packages that only come in
   transitively
 - **Updates** — what can be updated, vulnerable packages first, each update labelled patch, minor
-  or major, with the highest version on the same major next to a major one; update one, the
+  or major, with the highest on the same major next to a major one; update one, the
   marked ones, or all of them, optionally only within the major or minor version
 - **Consolidate** — packages referenced at different versions across projects, and which project
   has which; bring them to one version
@@ -111,7 +111,7 @@ when there are several). Without one, the projects below the current directory a
 |---|---|
 | `1`–`4`, `<Tab>` / `<S-Tab>` | Switch tab |
 | `/` | Search (Browse) or filter by id (other tabs); `⏎` or `<Esc>` back to the list |
-| `⏎` | The obvious action: install (Browse), a menu (Installed), update (Updates: a choice between the latest version and the same major when the latest is a major update), consolidate (Consolidate) |
+| `⏎` | The obvious action: install (Browse), a menu (Installed), update (Updates: when the latest is a major update, a choice between it and the highest on the same major, or a version to pick when the versions are not known), consolidate (Consolidate) |
 | `i` | Install in projects — or add an installed package to more projects |
 | `u` | Update to the latest version |
 | `U` | Update the marked packages, or all of them (Updates) |
@@ -129,10 +129,14 @@ when there are several). Without one, the projects below the current directory a
 
 An update is labelled by the biggest jump it makes in any project: Newtonsoft.Json at 12.0.1 in
 one project and 13.0.1 in another is a major update to 13.0.4. Under a limit, set with `b` or
-`updates.max_bump`, `U` takes each package to the highest version the limit allows, skips the
-ones it allows nothing for, and dims them in the list; the confirmation groups the updates as
-patch, minor and major, and names what it skips. The versions come from nuget.org; for a package
-it does not have, `U` asks the feeds first with `dotnet package search`.
+`updates.max_bump`, `U` takes each project to the highest version the limit allows from the one
+it is at: within the major version, the first goes to the highest 12.x and the second to 13.0.4.
+Packages the limit allows nothing for are skipped and dimmed in the list. The confirmation groups
+the updates as patch, minor and major, and names what it skips, the packages whose versions could
+not be fetched, and those whose version cannot be read (a `$(Property)`, labelled `?`). The
+versions come from nuget.org, leaving out the ones their authors unlisted; for a package it does
+not have, `U` asks the feeds first with `dotnet package search`. The highest version on the same
+major shows once the versions are known.
 
 Choosing projects opens a checklist: `<Space>` toggles, `a` toggles all, `⏎` confirms, `q` cancels.
 Changes run one at a time, with progress in the header, and the window reloads when they are done.
@@ -192,7 +196,7 @@ require("nuget").setup({
   },
   updates = {
     -- The biggest update `U` makes: "major" updates everything to its latest version, "minor"
-    -- stays on each package's major version, "patch" also on its minor one. A package with
+    -- keeps each project on its major version, "patch" also on its minor one. A package with
     -- nothing within the limit is skipped. Change it for the session with `b` (Updates tab).
     max_bump = "major",
   },

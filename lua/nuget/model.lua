@@ -19,7 +19,8 @@ local M = {}
 ---@field projects table<string, NugetProjectRef> direct references, by project path
 ---@field transitive table<string, string> transitive only: project path -> resolved version
 ---@field latest string? from the outdated report
----@field available string[]? every version nuget.org lists, when it was asked
+---@field available string[]? every version a feed lists: nuget.org's flat container (unlisted ones
+--- included) from the quick checks, or `dotnet package search` when `U` needed them
 ---@field vulnerabilities NugetVulnerability[]
 ---@field vulnerable_in table<string, true> projects whose resolved version is vulnerable
 ---@field deprecation {reasons: string[], alternative: string?}?
@@ -161,7 +162,7 @@ end
 
 --- A latest version learned from nuget.org before the outdated report; the report replaces it.
 --- The versions nuget.org lists are kept either way: the outdated report names only the latest
---- one, and a limited update (#1) needs the others.
+--- one, and an update kept within a limit needs the others.
 ---@param model NugetModel
 ---@param id string
 ---@param latest string
@@ -286,8 +287,18 @@ function M.has_update(pkg)
   return pkg.latest ~= nil and #M.projects_below(pkg, pkg.latest) > 0
 end
 
+--- The version a project references, when it can be compared: nil for a `$(Property)` or a
+--- range that did not resolve.
+---@param ref NugetProjectRef
+---@return string?
+local function readable_version(ref)
+  local v = semver.effective(ref.requested, ref.resolved)
+  return v and semver.parse(v) and v or nil
+end
+
 --- The version an update starts from: the lowest one among the projects it would change, so
---- that projects at different versions are judged by the biggest jump. Nil without an update.
+--- that projects at different versions are judged by the biggest jump. Projects whose version
+--- cannot be read are left out; nil without an update or when none can be read.
 ---@param pkg NugetPackage
 ---@return string?
 function M.update_base(pkg)
@@ -296,8 +307,7 @@ function M.update_base(pkg)
   end
   local base
   for _, path in ipairs(M.projects_below(pkg, pkg.latest)) do
-    local ref = pkg.projects[path]
-    local v = semver.effective(ref.requested, ref.resolved)
+    local v = readable_version(pkg.projects[path])
     if v and (not base or semver.compare(v, base) < 0) then
       base = v
     end
@@ -306,7 +316,7 @@ function M.update_base(pkg)
 end
 
 --- What kind of update the latest version is: patch, minor or major. Nil without an update, or
---- when a project's version cannot be read.
+--- when no project's version can be read.
 ---@param pkg NugetPackage
 ---@return NugetBump?
 function M.bump(pkg)
@@ -314,38 +324,105 @@ function M.bump(pkg)
   return base and semver.bump(base, pkg.latest) or nil
 end
 
---- The version to update to when updates are limited to `max_bump`: the latest one when it is
---- within the limit, otherwise the highest the limit allows. Nil when there is none; then the
---- second value says whether that is known (true) or the versions were never listed (false),
---- as for a package of a private feed before they are fetched.
+---@class NugetUpdateGroup
+---@field version string what these projects go to
+---@field bump NugetBump? the biggest jump among the projects whose version can be read
+---@field unreadable boolean? some of them are at a version that cannot be read
+---@field projects string[]
+
+---@alias NugetUpdateMissing "versions"|"unreadable"
+
+--- How an update kept within `max_bump` changes `pkg`, decided project by project from the
+--- version each one is at: to the latest version when that is within the limit, otherwise to the
+--- highest the limit allows from there. Projects are grouped by the version they go to; one with
+--- no version within the limit is left as it is.
+---
+--- A project whose version cannot be read goes to the latest version when there is no limit, and
+--- is left out under one. Nothing is planned when the answer is unknown, and the second value
+--- says why: "versions" when they were never listed (a private feed, before they are fetched),
+--- "unreadable" when no project's version can be read under a limit.
 ---@param pkg NugetPackage
 ---@param max_bump NugetBump
 ---@param include_prerelease boolean?
----@return string?, boolean
-function M.update_target(pkg, max_bump, include_prerelease)
+---@return NugetUpdateGroup[], NugetUpdateMissing?
+function M.update_plan(pkg, max_bump, include_prerelease)
   if not M.has_update(pkg) then
-    return nil, true
+    return {}, nil
   end
-  local bump = M.bump(pkg)
-  if not bump or semver.within(bump, max_bump) then
-    return pkg.latest, true
+  local groups, by_version = {}, {}
+  local function add(version, bump, path)
+    local g = by_version[version]
+    if not g then
+      g = { version = version, projects = {} }
+      by_version[version] = g
+      table.insert(groups, g)
+    end
+    if not bump then
+      g.unreadable = true
+    elseif not g.bump or not semver.within(bump, g.bump) then
+      g.bump = bump
+    end
+    table.insert(g.projects, path)
   end
-  if not pkg.available then
-    return nil, false
+  local readable, unreadable = 0, {}
+  for _, path in ipairs(M.projects_below(pkg, pkg.latest)) do
+    local v = readable_version(pkg.projects[path])
+    local bump = v and semver.bump(v, pkg.latest)
+    if not bump then
+      table.insert(unreadable, path)
+    else
+      readable = readable + 1
+      if semver.within(bump, max_bump) then
+        add(pkg.latest, bump, path)
+      elseif not pkg.available then
+        return {}, "versions"
+      else
+        local target = semver.highest_within(pkg.available, v, max_bump, include_prerelease)
+        if target then
+          add(target, semver.bump(v, target), path)
+        end
+      end
+    end
   end
-  return semver.highest_within(pkg.available, M.update_base(pkg), max_bump, include_prerelease), true
+  if max_bump == "major" then
+    for _, path in ipairs(unreadable) do
+      add(pkg.latest, nil, path)
+    end
+  elseif readable == 0 then
+    return {}, "unreadable"
+  end
+  table.sort(groups, function(a, b)
+    return semver.compare(a.version, b.version) < 0
+  end)
+  return groups, nil
+end
+
+--- The biggest jump of a plan: what it is labelled with. Nil when it is empty, or "major" when
+--- it moves a project whose version cannot be read, judged as the biggest jump there can be.
+---@param groups NugetUpdateGroup[]
+---@return NugetBump?
+function M.plan_bump(groups)
+  local biggest
+  for _, g in ipairs(groups) do
+    local bump = g.unreadable and "major" or g.bump
+    if not biggest or not semver.within(bump, biggest) then
+      biggest = bump
+    end
+  end
+  return biggest
 end
 
 --- For a package whose latest version is a major update, the highest update that stays on the
---- same major: the safe choice offered next to it. Nil otherwise.
+--- same major as the lowest project it would change: the safe choice offered next to it. Nil
+--- otherwise, or when the versions were never listed.
 ---@param pkg NugetPackage
 ---@param include_prerelease boolean?
 ---@return string?
 function M.safe_update(pkg, include_prerelease)
-  if M.bump(pkg) ~= "major" then
+  if M.bump(pkg) ~= "major" or not pkg.available then
     return nil
   end
-  return (M.update_target(pkg, "minor", include_prerelease))
+  return semver.highest_within(pkg.available, M.update_base(pkg), "minor", include_prerelease)
 end
 
 ---@param pkg NugetPackage

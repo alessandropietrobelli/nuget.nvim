@@ -65,7 +65,7 @@ describe("semver", function()
   end)
 end)
 
-describe("semver.bump (#1)", function()
+describe("semver.bump", function()
   it("names the number that changes", function()
     assert.equals("major", semver.bump("12.0.1", "13.0.4"))
     assert.equals("minor", semver.bump("3.0.0", "3.1.0"))

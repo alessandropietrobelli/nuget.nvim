@@ -11,7 +11,10 @@ local function fake_dotnet(dir)
     '  *--vulnerable*) cat "' .. fixtures .. '/list_vulnerable.json" ;;',
     '  *--deprecated*) cat "' .. fixtures .. '/list_deprecated.json" ;;',
     '  "list "*) cat "' .. fixtures .. '/list_plain.json" ;;',
-    '  "package search"*) cat "' .. fixtures .. '/search.json" ;;',
+    '  "package search"*)',
+    '    [ -f "' .. dir .. '/search_slow" ] && sleep 2',
+    '    [ -f "' .. dir .. '/search_fails" ] && exit 1',
+    '    cat "' .. fixtures .. '/search.json" ;;',
     '  "add "*) echo "$*" >> "' .. dir .. '/calls.log" ;;',
     "  *) exit 1 ;;",
     "esac",
@@ -171,35 +174,190 @@ describe("window", function()
     assert.matches("package Serilog %-%-version 4%.4%.0", calls[1])
   end)
 
-  -- U under a limit (#1). The fake dotnet lists only 4.4.0 for any package, so Serilog, whose
+  -- U under a limit. The fake dotnet lists only 4.4.0 for any package, so Serilog, whose
   -- versions the window never had, is fetched and then skipped.
-  it("limits U to updates within the major version, and says what it skips", function()
+  local function limited(max_bump)
     require("nuget").setup({
       solution = dir .. "/A.sln",
       details = { fetch = false },
       fast = false,
-      updates = { max_bump = "minor" },
+      updates = { max_bump = max_bump },
     })
     require("nuget").open({ tab = "updates" })
     local s = wait_loaded()
     s.model.packages["newtonsoft.json"].available = { "12.0.1", "12.0.3", "13.0.1", "13.0.4" }
-    local prompt
-    local select = vim.ui.select
+    return s
+  end
+
+  --- Answer every vim.ui.select with `pick` (an index, or a function of the items) and collect
+  --- what was asked; messages are collected too.
+  local function answering(pick)
+    local asked, messages = {}, {}
+    local select, notify = vim.ui.select, vim.notify
     ---@diagnostic disable-next-line: duplicate-set-field
     vim.ui.select = function(items, opts, on_choice)
-      prompt = opts.prompt
-      on_choice(items[1])
+      local labels = vim.tbl_map(function(item)
+        return opts.format_item and opts.format_item(item) or item
+      end, items)
+      table.insert(asked, { prompt = opts.prompt, items = labels })
+      local i = type(pick) == "function" and pick(labels) or pick
+      on_choice(i and items[i])
     end
-    ui.actions.update_all()
-    local done = vim.wait(5000, function()
-      return vim.fn.filereadable(dir .. "/calls.log") == 1
+    ---@diagnostic disable-next-line: duplicate-set-field
+    vim.notify = function(msg, level)
+      table.insert(messages, { msg = msg, level = level })
+    end
+    return asked, messages, function()
+      vim.ui.select, vim.notify = select, notify
+    end
+  end
+
+  local function calls(n)
+    vim.wait(5000, function()
+      return vim.fn.filereadable(dir .. "/calls.log") == 1 and #vim.fn.readfile(dir .. "/calls.log") >= n
     end, 20)
-    vim.ui.select = select
-    assert.is_true(done, "nothing was updated")
-    assert.equals("1 patch: Newtonsoft.Json → 12.0.3 · skipped, ≤ minor: Serilog", prompt)
-    local calls = vim.fn.readfile(dir .. "/calls.log")
-    assert.equals(1, #calls, "only Api, which is below 12.0.3")
-    assert.matches("package Newtonsoft%.Json %-%-version 12%.0%.3", calls[1])
+    return vim.fn.filereadable(dir .. "/calls.log") == 1 and vim.fn.readfile(dir .. "/calls.log") or {}
+  end
+
+  local function said(messages, pattern)
+    return vim.iter(messages):any(function(m)
+      return m.msg:find(pattern) ~= nil
+    end)
+  end
+
+  it("limits U to updates within the major version, project by project, and says what it skips", function()
+    limited("minor")
+    local asked, _, restore = answering(1)
+    ui.actions.update_all()
+    local log = calls(2)
+    restore()
+    assert.equals("1 patch: Newtonsoft.Json → 12.0.3/13.0.4 · skipped, ≤ minor: Serilog", asked[1].prompt)
+    table.sort(log)
+    assert.equals(2, #log)
+    -- Api stays on 12.x; Lib, already on 13.0.1, gets its patch
+    assert.matches("Api%.csproj package Newtonsoft%.Json %-%-version 12%.0%.3", log[1])
+    assert.matches("Lib%.csproj package Newtonsoft%.Json %-%-version 13%.0%.4", log[2])
+  end)
+
+  it("limits only the marked packages when some are marked", function()
+    local s = limited("minor")
+    s.marks = { serilog = true }
+    local asked, messages, restore = answering(1)
+    ui.actions.update_all()
+    vim.wait(5000, function()
+      return #messages > 1
+    end, 20)
+    restore()
+    assert.equals(0, #asked)
+    assert.is_true(said(messages, "^Nothing to update: 1 package skipped, ≤ minor$"))
+  end)
+
+  it("updates what the limit allows once the versions are fetched", function()
+    local s = limited("minor")
+    -- Serilog at 2.10.0 in Api and 4.3.0 in Lib: Lib's minor update needs no list, Api's major does
+    for path, ref in pairs(s.model.packages["serilog"].projects) do
+      if path:match("Lib") then
+        ref.requested, ref.resolved = "4.3.0", "4.3.0"
+      end
+    end
+    local asked, _, restore = answering(2)
+    ui.actions.update_all()
+    vim.wait(5000, function()
+      return #asked > 0
+    end, 20)
+    restore()
+    assert.equals("1 patch: Newtonsoft.Json → 12.0.3/13.0.4 · 1 minor: Serilog → 4.4.0", asked[1].prompt)
+    assert.same({ "4.4.0" }, s.model.packages["serilog"].available)
+  end)
+
+  it("reports the packages whose versions could not be fetched, instead of skipping them", function()
+    limited("minor")
+    vim.fn.writefile({}, dir .. "/search_fails")
+    local asked, messages, restore = answering(2)
+    ui.actions.update_all()
+    vim.wait(5000, function()
+      return #asked > 0
+    end, 20)
+    restore()
+    assert.matches("not checked, the versions could not be fetched: Serilog", asked[1].prompt)
+    assert.is_true(said(messages, "Could not fetch the versions of Serilog: press r"))
+    assert.is_nil(ui.state().model.packages["serilog"].available, "fetched again next time")
+  end)
+
+  it("does not ask twice, nor act, while U is fetching", function()
+    limited("minor")
+    vim.fn.writefile({}, dir .. "/search_slow")
+    local asked, messages, restore = answering(2)
+    ui.actions.update_all()
+    ui.actions.update_all()
+    ui.actions.update()
+    vim.wait(5000, function()
+      return #asked > 0
+    end, 20)
+    vim.wait(300)
+    restore()
+    assert.equals(1, #asked)
+    assert.is_true(said(messages, "Wait for the current operation"))
+  end)
+
+  it("drops what U was fetching when the window closes, and asks nothing in the next one", function()
+    limited("minor")
+    vim.fn.writefile({}, dir .. "/search_slow")
+    local asked, _, restore = answering(2)
+    vim.v.errmsg = ""
+    ui.actions.update_all()
+    ui.close()
+    require("nuget").open({ tab = "updates" })
+    wait_loaded()
+    vim.wait(2500)
+    restore()
+    assert.equals(0, #asked)
+    assert.equals("", vim.v.errmsg)
+  end)
+
+  it("takes an unlisted version out of the ones U goes to", function()
+    local s = limited("minor")
+    s.config.fast = true
+    local registry = require("nuget.registry")
+    local fetch = registry.fetch
+    ---@diagnostic disable-next-line: duplicate-set-field
+    registry.fetch = function(id, version, cb)
+      vim.schedule(function()
+        cb({ id = id, version = version, listed = version ~= "12.0.3" })
+      end)
+    end
+    s.model.packages["newtonsoft.json"].available = { "12.0.1", "12.0.2", "12.0.3", "13.0.1", "13.0.4" }
+    s.model.packages["serilog"].available = { "2.10.0", "3.0.0", "4.4.0" }
+    local asked, _, restore = answering(2)
+    ui.actions.update_all()
+    vim.wait(5000, function()
+      return #asked > 0
+    end, 20)
+    restore()
+    registry.fetch = fetch
+    assert.equals("1 patch: Newtonsoft.Json → 12.0.2/13.0.4 · skipped, ≤ minor: Serilog", asked[1].prompt)
+  end)
+
+  it("offers the same major next to a major update on enter", function()
+    local s = limited("major")
+    vim.api.nvim_win_set_cursor(s.layout.list.win, { 1, 0 })
+    local asked, _, restore = answering(2)
+    ui.actions.primary()
+    local log = calls(1)
+    restore()
+    assert.same({ "Update to 13.0.4 (major)", "Update to 12.0.3 (same major)" }, asked[1].items)
+    assert.equals(1, #log)
+    assert.matches("Api%.csproj package Newtonsoft%.Json %-%-version 12%.0%.3", log[1])
+  end)
+
+  it("offers to choose a version for a major update whose versions are not known", function()
+    limited("major")
+    local s = ui.state()
+    vim.api.nvim_win_set_cursor(s.layout.list.win, { 2, 0 })
+    local asked, _, restore = answering(nil)
+    ui.actions.primary()
+    restore()
+    assert.same({ "Update to 4.4.0 (major)", "Choose version…" }, asked[1].items)
   end)
 
   it("cycles the limit of U with b, and shows it in the hints", function()
